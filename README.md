@@ -16,7 +16,10 @@ emulator, so spacing on a real watch will differ slightly.
 ## Features
 
 - Time (12/24 hour follows the watch setting), date, and a large team logo
-- Team color themes: background, plus an accent color for the game bar
+- Team color themes: background, plus a game bar in the team's primary or
+  secondary color, or any custom color
+- Battery indicator: top right (top center on round watches), red at 20% or
+  less and green while charging on color watches
 - Split view: your team's next game with both logos, the background split
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
@@ -36,6 +39,9 @@ emulator, so spacing on a real watch will differ slightly.
 | --- | --- | --- |
 | My team | None (league's next game), or one of the 9 teams | None |
 | Layout | Big team logo / Split view (only with a team picked) | Big team logo |
+| Game bar color (color watches) | Team primary / Team secondary / Custom | Team primary |
+| Custom bar color | Any Pebble color, used when the bar color is Custom | Teal (`00AAAA`) |
+| Show battery | Always / When low (20% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |
 | Show | Start time / Countdown to start | Start time |
 | Start times in | Eastern (as listed) / My time zone / Home team's time zone | Eastern |
@@ -66,7 +72,7 @@ phone does the web request.
 
 | File | Purpose |
 | --- | --- |
-| `src/c/main.c` | Watchface: layout per screen shape, team table (colors, abbreviations), drawing, AppMessage handling |
+| `src/c/main.c` | Watchface: layout per screen shape, team table (background, primary and secondary bar colors, abbreviations), drawing, AppMessage handling |
 | `src/pkjs/index.js` | Phone side: fetches and parses the ticker, picks the game, formats start times |
 | `src/pkjs/config.js` | Settings page ([Clay](https://github.com/pebble-dev/clay)) |
 | `src/pkjs/teams.js` | Team names, full names and arena time zones |

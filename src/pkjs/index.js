@@ -32,7 +32,8 @@ var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
   team: '', view: 'logo', homeOnly: false, mode: 'time', timeZone: 'eastern',
-  showScores: false, liveInterval: 1
+  showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
+  battery: 'always'
 };
 
 function loadSettings() {
@@ -211,10 +212,19 @@ function refreshDelay(game, s, now) {
   return mins <= 0 ? LIVE_NO_SCORES : Math.min(IDLE_REFRESH, mins);
 }
 
-// The settings that only change how the watch draws.
+// The settings that only change how the watch draws. The watch numbers its
+// options in the order they're listed here.
 function displayMessage(s) {
   return { Team: s.team, View: s.view === 'split' ? 1 : 0,
-           Mode: s.mode === 'countdown' ? 1 : 0 };
+           Mode: s.mode === 'countdown' ? 1 : 0,
+           BarColor: Math.max(0, ['primary', 'secondary', 'custom'].indexOf(s.barColor)),
+           CustomColor: s.customColor,
+           Battery: Math.max(0, ['always', 'low', 'never'].indexOf(s.battery)) };
+}
+
+// Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
+function colorValue(v) {
+  return typeof v === 'string' ? parseInt(v.replace(/^#|^0x/i, ''), 16) || 0 : +v || 0;
 }
 
 // Everything the watch needs for one game, ready for sendAppMessage. Scores
@@ -331,7 +341,10 @@ if (typeof Pebble !== 'undefined') {
       mode: v('Mode', DEFAULTS.mode),
       timeZone: v('TimeZone', DEFAULTS.timeZone),
       showScores: !!v('ShowScores', DEFAULTS.showScores),
-      liveInterval: +v('LiveInterval', DEFAULTS.liveInterval)
+      liveInterval: +v('LiveInterval', DEFAULTS.liveInterval),
+      barColor: v('BarColor', DEFAULTS.barColor),
+      customColor: colorValue(v('CustomColor', DEFAULTS.customColor)),
+      battery: v('Battery', DEFAULTS.battery)
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     // Switch the theme right away; the game follows once the fetch is back.

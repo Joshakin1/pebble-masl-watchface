@@ -15,13 +15,19 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 2
+#define PERSIST_VERSION 3
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
 
 enum { STATE_NONE, STATE_SCHEDULED, STATE_LIVE, STATE_FINAL };
 enum { MODE_START_TIME, MODE_COUNTDOWN };
+enum { BAR_PRIMARY, BAR_SECONDARY, BAR_CUSTOM };
+enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
+
+// Battery level at or below which it counts as low (shown in red, and shown
+// at all with the "when low" setting).
+#define BATTERY_LOW_PERCENT 20
 
 typedef struct {
   char team[12];    // selected team's short name, "" for the league's next game
@@ -37,6 +43,9 @@ typedef struct {
   uint8_t state;
   uint8_t mode;
   uint8_t split;    // 1 to show the selected team's game in split view
+  uint8_t bar_style;   // BAR_*: which color the game bar uses
+  uint8_t battery;     // BATTERY_*: when to show the battery
+  int32_t bar_color;   // hex color for BAR_CUSTOM
 } Game;
 
 typedef struct {
@@ -45,28 +54,29 @@ typedef struct {
   uint32_t logo;      // big logo, for the selected team
   uint32_t half;      // smaller logo, for two teams side by side
   uint32_t bg;        // background color
-  uint32_t accent;    // game bar color
+  uint32_t accent;    // game bar color, primary
+  uint32_t accent2;   // game bar color, secondary
 } Team;
 
 // Keep in sync with src/pkjs/teams.js. Backgrounds are all dark enough for
 // white text, so the split matchup screen works for any pair.
 static const Team s_teams[] = {
-  { "Ambush", "STL", RESOURCE_ID_LOGO_AMBUSH, RESOURCE_ID_HALF_AMBUSH, 0x000000, 0xFF55AA },
-  { "Blast", "BAL", RESOURCE_ID_LOGO_BLAST, RESOURCE_ID_HALF_BLAST, 0xAA0000, 0xFFFF00 },
-  { "Comets", "KC", RESOURCE_ID_LOGO_COMETS, RESOURCE_ID_HALF_COMETS, 0x0055AA, 0xFF5500 },
-  { "Sockers", "SD", RESOURCE_ID_LOGO_SOCKERS, RESOURCE_ID_HALF_SOCKERS, 0x000055, 0xFFAA00 },
-  { "Spirits", "LV", RESOURCE_ID_LOGO_SPIRITS, RESOURCE_ID_HALF_SPIRITS, 0x000000, 0xFF5500 },
-  { "Stars", "TAC", RESOURCE_ID_LOGO_STARS, RESOURCE_ID_HALF_STARS, 0x000000, 0xFFAA00 },
-  { "Strykers", "EMP", RESOURCE_ID_LOGO_STRYKERS, RESOURCE_ID_HALF_STRYKERS, 0x550055, 0xAA00AA },
-  { "UCFC", "UTI", RESOURCE_ID_LOGO_UCFC, RESOURCE_ID_HALF_UCFC, 0x000055, 0x00AAFF },
-  { "Wave", "MKE", RESOURCE_ID_LOGO_WAVE, RESOURCE_ID_HALF_WAVE, 0x000000, 0xFFAA00 },
+  { "Ambush", "STL", RESOURCE_ID_LOGO_AMBUSH, RESOURCE_ID_HALF_AMBUSH, 0x000000, 0xFF55AA, 0x00AAAA },
+  { "Blast", "BAL", RESOURCE_ID_LOGO_BLAST, RESOURCE_ID_HALF_BLAST, 0xAA0000, 0xFFFF00, 0x000000 },
+  { "Comets", "KC", RESOURCE_ID_LOGO_COMETS, RESOURCE_ID_HALF_COMETS, 0x0055AA, 0xFF5500, 0xFFFFFF },
+  { "Sockers", "SD", RESOURCE_ID_LOGO_SOCKERS, RESOURCE_ID_HALF_SOCKERS, 0x000055, 0xFFAA00, 0x0055AA },
+  { "Spirits", "LV", RESOURCE_ID_LOGO_SPIRITS, RESOURCE_ID_HALF_SPIRITS, 0x000000, 0xFF5500, 0xFFFFFF },
+  { "Stars", "TAC", RESOURCE_ID_LOGO_STARS, RESOURCE_ID_HALF_STARS, 0x000000, 0xFFAA00, 0x000055 },
+  { "Strykers", "EMP", RESOURCE_ID_LOGO_STRYKERS, RESOURCE_ID_HALF_STRYKERS, 0x550055, 0xAA00AA, 0xAAAAAA },
+  { "UCFC", "UTI", RESOURCE_ID_LOGO_UCFC, RESOURCE_ID_HALF_UCFC, 0x000055, 0x00AAFF, 0x0055AA },
+  { "Wave", "MKE", RESOURCE_ID_LOGO_WAVE, RESOURCE_ID_HALF_WAVE, 0x000000, 0xFFAA00, 0xFFFFFF },
 };
 #define NUM_TEAMS ((int)ARRAY_LENGTH(s_teams))
 
 // Where everything goes on this screen. Logo boxes match the image sizes in
 // tools/convert_logos.py.
 typedef struct {
-  GRect date, logo, time, line1, line2;
+  GRect date, logo, time, line1, line2, battery;
   int16_t bar_y;
   int16_t half_dx;  // distance from the center to each half logo's center
   GFont date_font, time_font, line1_font, line2_font;
@@ -105,11 +115,23 @@ static void team_code(const char *name, char *out, size_t size) {
 }
 
 #ifdef PBL_COLOR
-// A team's background or accent color, or fallback for a team not in s_teams.
-static GColor team_color(const Team *t, bool accent, GColor fallback) {
-  return t ? GColorFromHEX(accent ? t->accent : t->bg) : fallback;
+// A team's background color, or black for a team not in s_teams.
+static GColor team_bg(const Team *t) {
+  return t ? GColorFromHEX(t->bg) : GColorBlack;
 }
 #endif
+
+// The game bar's color: the selected team's primary or secondary accent, or
+// the custom color from settings. Black in league mode unless custom.
+static GColor bar_color(const Team *team) {
+#ifdef PBL_COLOR
+  if (s_game.bar_style == BAR_CUSTOM) return GColorFromHEX(s_game.bar_color);
+  if (!team) return GColorBlack;
+  return GColorFromHEX(s_game.bar_style == BAR_SECONDARY ? team->accent2 : team->accent);
+#else
+  return GColorBlack;
+#endif
+}
 
 // Black or white, whichever reads better on bg.
 static GColor text_on(GColor bg) {
@@ -128,22 +150,22 @@ static void set_layout(GRect b) {
     *l = (Layout){ .date = GRect(0, 20, w, 30), .logo = GRect(0, 50, w, 110),
                    .time = GRect(0, 152, w, 52), .bar_y = 206,
                    .line1 = GRect(40, 203, w - 80, 22), .line2 = GRect(40, 220, w - 80, 30),
-                   .half_dx = 56 };
+                   .half_dx = 56, .battery = GRect(w / 2 - 10, 6, 20, 10) };
   } else if (w >= 200) {  // emery, 200x228
     *l = (Layout){ .date = GRect(0, -4, w, 30), .logo = GRect(0, 26, w, 106),
                    .time = GRect(0, 124, w, 52), .bar_y = 182,
                    .line1 = GRect(4, 179, w - 8, 22), .line2 = GRect(4, 196, w - 8, 30),
-                   .half_dx = 50 };
+                   .half_dx = 50, .battery = GRect(w - 26, 7, 20, 10) };
   } else if (w >= 180) {  // chalk, 180x180 round
-    *l = (Layout){ .date = GRect(0, 8, w, 22), .logo = GRect(0, 30, w, 68),
+    *l = (Layout){ .date = GRect(0, 10, w, 22), .logo = GRect(0, 31, w, 68),
                    .time = GRect(0, 88, w, 50), .bar_y = 140,
                    .line1 = GRect(25, 137, w - 50, 16), .line2 = GRect(25, 150, w - 50, 22),
-                   .half_dx = 38 };
+                   .half_dx = 38, .battery = GRect(w / 2 - 8, 2, 16, 8) };
   } else {                // basalt, diorite, flint, 144x168
     *l = (Layout){ .date = GRect(0, -3, w, 22), .logo = GRect(0, 20, w, 74),
                    .time = GRect(0, 84, w, 50), .bar_y = 136,
                    .line1 = GRect(2, 133, w - 4, 16), .line2 = GRect(2, 146, w - 4, 22),
-                   .half_dx = 36 };
+                   .half_dx = 36, .battery = GRect(w - 19, 4, 16, 8) };
   }
   bool large = w >= 200;
   l->date_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
@@ -299,6 +321,28 @@ static void draw_text(GContext *ctx, const char *text, GFont font, GRect r, GCol
 // ---------------------------------------------------------------------------
 // Drawing
 
+// A battery outline with a nub on the right, filled to the charge level: red
+// when low, green while charging (color watches).
+static void draw_battery(GContext *ctx, GRect r, GColor fg) {
+  BatteryChargeState b = battery_state_service_peek();
+  bool low = b.charge_percent <= BATTERY_LOW_PERCENT;
+  if (s_game.battery == BATTERY_NEVER ||
+      (s_game.battery == BATTERY_LOW && !low && !b.is_charging)) {
+    return;
+  }
+  GRect body = GRect(r.origin.x, r.origin.y, r.size.w - 2, r.size.h);
+  graphics_context_set_stroke_color(ctx, fg);
+  graphics_draw_rect(ctx, body);
+  graphics_context_set_fill_color(ctx, fg);
+  graphics_fill_rect(ctx, GRect(body.origin.x + body.size.w, r.origin.y + r.size.h / 4, 2,
+                                r.size.h - r.size.h / 4 * 2), 0, GCornerNone);
+  int fill = (body.size.w - 4) * b.charge_percent / 100;
+  graphics_context_set_fill_color(
+      ctx, PBL_IF_COLOR_ELSE(b.is_charging ? GColorGreen : low ? GColorRed : fg, fg));
+  graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2, fill > 0 ? fill : 1,
+                                body.size.h - 4), 0, GCornerNone);
+}
+
 static void canvas_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
   const Layout *l = &s_layout;
@@ -306,26 +350,26 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   int16_t cx = b.size.w / 2;
 
   // Background: the team's color, or split down the middle for a matchup.
-  // The bar is the selected team's accent color, or black for the league.
+  // The bar color comes from bar_color().
 #ifdef PBL_COLOR
   const Team *team = find_team(s_game.team);
   if (matchup) {
     const Team *away = find_team(s_game.away), *home = find_team(s_game.home);
-    graphics_context_set_fill_color(ctx, team_color(away, false, GColorBlack));
+    graphics_context_set_fill_color(ctx, team_bg(away));
     graphics_fill_rect(ctx, GRect(0, 0, cx, b.size.h), 0, GCornerNone);
-    graphics_context_set_fill_color(ctx, team_color(home, false, GColorBlack));
+    graphics_context_set_fill_color(ctx, team_bg(home));
     graphics_fill_rect(ctx, GRect(cx, 0, b.size.w - cx, b.size.h), 0, GCornerNone);
   } else {
-    graphics_context_set_fill_color(ctx, team_color(team, false, GColorBlack));
+    graphics_context_set_fill_color(ctx, team_bg(team));
     graphics_fill_rect(ctx, b, 0, GCornerNone);
   }
   GColor fg = GColorWhite;
-  GColor bar = team_color(team, true, GColorBlack);
+  GColor bar = bar_color(team);
 #else
   graphics_context_set_fill_color(ctx, GColorWhite);
   graphics_fill_rect(ctx, b, 0, GCornerNone);
   GColor fg = GColorBlack;
-  GColor bar = GColorBlack;
+  GColor bar = bar_color(NULL);
 #endif
   graphics_context_set_fill_color(ctx, bar);
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
@@ -341,6 +385,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   const char *clock_text = clock[0] == '0' && !clock_is_24h_style() ? clock + 1 : clock;
   draw_text(ctx, date, l->date_font, l->date, fg);
   draw_text(ctx, clock_text, l->time_font, l->time, fg);
+  draw_battery(ctx, l->battery, fg);
 
   // Logos
   if (matchup && (s_game.away[0] || s_game.home[0])) {
@@ -417,6 +462,9 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   read_string(it, MESSAGE_KEY_Status, s_game.status, sizeof(s_game.status));
   if (read_int(it, MESSAGE_KEY_Mode, &n)) s_game.mode = n;
   if (read_int(it, MESSAGE_KEY_View, &n)) s_game.split = n;
+  if (read_int(it, MESSAGE_KEY_BarColor, &n)) s_game.bar_style = n;
+  if (read_int(it, MESSAGE_KEY_CustomColor, &n)) s_game.bar_color = n;
+  if (read_int(it, MESSAGE_KEY_Battery, &n)) s_game.battery = n;
   if (read_int(it, MESSAGE_KEY_State, &n)) s_game.state = n;
   if (read_int(it, MESSAGE_KEY_Start, &n)) s_game.start = n;
   if (read_int(it, MESSAGE_KEY_AwayScore, &n)) s_game.away_score = n;
@@ -443,6 +491,10 @@ static void tick_handler(struct tm *tick_time, TimeUnits changed) {
     s_refresh_in = DEFAULT_REFRESH;  // until the phone answers with its own delay
     request_refresh();
   }
+  layer_mark_dirty(s_canvas);
+}
+
+static void battery_handler(BatteryChargeState state) {
   layer_mark_dirty(s_canvas);
 }
 
@@ -479,6 +531,7 @@ static void init(void) {
   app_message_open(512, 64);
 
   tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  battery_state_service_subscribe(battery_handler);
   connection_service_subscribe((ConnectionHandlers){
     .pebble_app_connection_handler = app_connection_handler,
   });
@@ -486,6 +539,7 @@ static void init(void) {
 
 static void deinit(void) {
   tick_timer_service_unsubscribe();
+  battery_state_service_unsubscribe();
   connection_service_unsubscribe();
   window_destroy(s_window);
   destroy_logo(&s_logo);

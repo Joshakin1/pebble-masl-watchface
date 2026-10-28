@@ -66,6 +66,51 @@ module.exports = [
   },
   {
     type: 'section',
+    capabilities: ['COLOR'],
+    items: [
+      { type: 'heading', defaultValue: 'Colors' },
+      {
+        type: 'select',
+        messageKey: 'BarColor',
+        label: 'Game bar color',
+        description: "Primary and secondary are your team's colors. With no team " +
+                     'picked the bar is black unless you choose Custom.',
+        defaultValue: 'primary',
+        options: [
+          { label: 'Team primary', value: 'primary' },
+          { label: 'Team secondary', value: 'secondary' },
+          { label: 'Custom', value: 'custom' }
+        ]
+      },
+      {
+        type: 'color',
+        messageKey: 'CustomColor',
+        label: 'Custom bar color',
+        description: 'Used when the game bar color is Custom.',
+        defaultValue: '00AAAA',
+        sunlight: false
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      { type: 'heading', defaultValue: 'Battery' },
+      {
+        type: 'select',
+        messageKey: 'Battery',
+        label: 'Show battery',
+        defaultValue: 'always',
+        options: [
+          { label: 'Always', value: 'always' },
+          { label: 'When low (20% or less) or charging', value: 'low' },
+          { label: 'Never', value: 'never' }
+        ]
+      }
+    ]
+  },
+  {
+    type: 'section',
     items: [
       { type: 'heading', defaultValue: 'Live games' },
       {
