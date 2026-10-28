@@ -102,6 +102,26 @@ module.exports = [
         description: 'Used when the game bar color is Custom.',
         defaultValue: '00AAAA',
         sunlight: false
+      },
+      {
+        type: 'select',
+        messageKey: 'BgColor',
+        label: 'Background color',
+        description: "Custom replaces your team's color, in split view too. " +
+                     'With a light color the time and date turn black.',
+        defaultValue: 'team',
+        options: [
+          { label: 'Team color', value: 'team' },
+          { label: 'Custom', value: 'custom' }
+        ]
+      },
+      {
+        type: 'color',
+        messageKey: 'CustomBg',
+        label: 'Custom background color',
+        description: 'Used when the background color is Custom and a team is picked.',
+        defaultValue: '000000',
+        sunlight: false
       }
     ]
   },
@@ -115,6 +135,35 @@ module.exports = [
         label: 'Show seconds',
         description: 'Redraws the face every second, which uses noticeably more battery.',
         defaultValue: false
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      { type: 'heading', defaultValue: 'Weather' },
+      {
+        type: 'select',
+        messageKey: 'Weather',
+        label: 'Show weather',
+        description: "Top left (next to the date on round watches), from your phone's " +
+                     'location via Open-Meteo. Updates every 30 minutes.',
+        defaultValue: 'off',
+        options: [
+          { label: 'Off', value: 'off' },
+          { label: 'Temperature', value: 'temp' },
+          { label: 'Temperature and icon', value: 'icon' }
+        ]
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'TempUnits',
+        label: 'Units',
+        defaultValue: 'f',
+        options: [
+          { label: 'Fahrenheit', value: 'f' },
+          { label: 'Celsius', value: 'c' }
+        ]
       }
     ]
   },

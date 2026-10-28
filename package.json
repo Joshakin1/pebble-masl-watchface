@@ -48,7 +48,13 @@
       "TimeZone",
       "HomeOnly",
       "ShowScores",
-      "LiveInterval"
+      "LiveInterval",
+      "BgColor",
+      "CustomBg",
+      "Weather",
+      "TempUnits",
+      "Temp",
+      "WeatherIcon"
     ],
     "resources": {
       "media": [
@@ -793,7 +799,8 @@
       ]
     },
     "capabilities": [
-      "configurable"
+      "configurable",
+      "location"
     ]
   }
 }

@@ -3,6 +3,8 @@
 // should show (the selected team's next or live game, or the league's next
 // game when no team is selected), and sends it to the watch in one message.
 // The watch asks for a refresh when the delay sent with each game runs out.
+// When weather is on, it also sends the temperature and conditions where the
+// phone is, from Open-Meteo, at most every half hour.
 
 var TEAMS = require('./teams');
 
@@ -10,6 +12,9 @@ var TICKER_URL = 'https://web.api.digitalshift.ca/partials/score-ticker';
 // Public site token embedded in maslsoccer.com. If the face starts showing
 // "Error 401/403", grab a fresh ticket from DevTools and paste it here.
 var TICKET = 'sBo7AT5RH6DLyYeFtGiJvpXa_JsGl9LIj8dSnDZTEwj5gPgukowAIc9Swg-t9T6dgm0IUwtnCacatO0TAb05PNqb';
+
+// Free, no key needed. Coordinates are rounded to about a kilometer.
+var WEATHER_URL = 'https://api.open-meteo.com/v1/forecast';
 
 // Game states, as sent to the watch in State.
 var NONE = 0, SCHEDULED = 1, LIVE = 2, FINAL = 3;
@@ -24,6 +29,14 @@ var ERROR_REFRESH = 15;
 var STALE_MS = 4 * 3600 * 1000;
 // With scores on, a final stays up this long after its start time.
 var FINAL_SHOW_MS = 6 * 3600 * 1000;
+// Minutes between weather updates. While weather is on, the watch asks at
+// least this often.
+var WEATHER_REFRESH = 30;
+
+// Weather icons, as sent to the watch in WeatherIcon. Keep in sync with the
+// WX_* enum in main.c.
+var WX_SUN = 1, WX_MOON = 2, WX_PARTLY_SUN = 3, WX_PARTLY_MOON = 4, WX_CLOUD = 5,
+    WX_FOG = 6, WX_RAIN = 7, WX_SNOW = 8, WX_STORM = 9;
 
 var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
               'August', 'September', 'October', 'November', 'December'];
@@ -33,7 +46,8 @@ var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
   team: '', view: 'logo', homeOnly: false, mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
-  battery: 'always', seconds: false, countdownDetail: 'hours'
+  battery: 'always', seconds: false, countdownDetail: 'hours',
+  bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f'
 };
 
 function loadSettings() {
@@ -202,6 +216,11 @@ function pickGame(games, s, now) {
 
 // Minutes until the watch should ask again.
 function refreshDelay(game, s, now) {
+  var delay = gameDelay(game, s, now);
+  return s.weather === 'off' ? delay : Math.min(delay, WEATHER_REFRESH);
+}
+
+function gameDelay(game, s, now) {
   if (!game) return IDLE_REFRESH;
   if (game.state === LIVE) return s.showScores ? +s.liveInterval || 1 : LIVE_NO_SCORES;
   if (game.state === FINAL) return FINAL_REFRESH;
@@ -222,7 +241,10 @@ function displayMessage(s) {
            Battery: Math.max(0, ['always', 'low', 'never'].indexOf(s.battery)),
            Seconds: s.seconds ? 1 : 0,
            CountdownDetail:
-             Math.max(0, ['hours', 'minutes', 'seconds'].indexOf(s.countdownDetail)) };
+             Math.max(0, ['hours', 'minutes', 'seconds'].indexOf(s.countdownDetail)),
+           BgColor: s.bgColor === 'custom' ? 1 : 0,
+           CustomBg: s.customBg,
+           Weather: Math.max(0, ['off', 'temp', 'icon'].indexOf(s.weather)) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -294,13 +316,85 @@ function getTicker(onContent, onError) {
   xhr.send();
 }
 
+// Messages go one at a time, since the weather and the game can come back
+// from the network together.
+var outbox = [], sending = false;
+
 function send(msg) {
-  Pebble.sendAppMessage(msg, null, function () {
+  outbox.push(msg);
+  if (!sending) sendNext();
+}
+
+function sendNext() {
+  var msg = outbox.shift();
+  sending = !!msg;
+  if (!msg) return;
+  Pebble.sendAppMessage(msg, sendNext, function () {
     console.log('Failed to send ' + Object.keys(msg).join(','));
+    sendNext();
   });
 }
 
+// Open-Meteo's WMO weather code as one of the watch's icons.
+function weatherIcon(code, isDay) {
+  if (code <= 1) return isDay ? WX_SUN : WX_MOON;
+  if (code === 2) return isDay ? WX_PARTLY_SUN : WX_PARTLY_MOON;
+  if (code === 3) return WX_CLOUD;
+  if (code === 45 || code === 48) return WX_FOG;
+  if ((code >= 71 && code <= 77) || code === 85 || code === 86) return WX_SNOW;
+  if (code >= 95) return WX_STORM;
+  return WX_RAIN;  // drizzle, rain, freezing rain and showers
+}
+
+// When weather was last asked for, in ms. Reset on failure so the next
+// refresh tries again.
+var weatherAsked = 0;
+
+// Send the weather where the phone is, unless it was fetched recently or
+// weather is off. `force` skips the wait, for a settings change.
+function fetchWeather(s, force) {
+  var now = Date.now();
+  if (s.weather === 'off') return;
+  if (!force && now - weatherAsked < (WEATHER_REFRESH - 5) * 60000) return;
+  weatherAsked = now;
+  var failed = function (why) {
+    console.log('Weather failed: ' + why);
+    weatherAsked = 0;
+  };
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    failed('no location service');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(function (pos) {
+    var url = WEATHER_URL + '?latitude=' + pos.coords.latitude.toFixed(2) +
+              '&longitude=' + pos.coords.longitude.toFixed(2) +
+              '&current=temperature_2m,weather_code,is_day' +
+              '&temperature_unit=' + (s.tempUnits === 'c' ? 'celsius' : 'fahrenheit');
+    var xhr = new XMLHttpRequest();
+    xhr.open('GET', url, true);
+    xhr.timeout = 15000;
+    xhr.onload = function () {
+      var c;
+      try {
+        c = JSON.parse(xhr.responseText).current;
+      } catch (e) { /* handled below */ }
+      if (xhr.status !== 200 || !c || typeof c.temperature_2m !== 'number') {
+        failed('status ' + xhr.status);
+        return;
+      }
+      send({ Temp: Math.round(c.temperature_2m),
+             WeatherIcon: weatherIcon(c.weather_code, c.is_day) });
+    };
+    xhr.onerror = function () { failed('no connection'); };
+    xhr.ontimeout = function () { failed('timed out'); };
+    xhr.send();
+  }, function (err) {
+    failed('no location (' + err.message + ')');
+  }, { timeout: 15000, maximumAge: WEATHER_REFRESH * 60000 });
+}
+
 function fetchGame() {
+  fetchWeather(loadSettings(), false);
   getTicker(function (html) {
     var s = loadSettings(), now = Date.now(), game;
     try {
@@ -349,11 +443,17 @@ if (typeof Pebble !== 'undefined') {
       customColor: colorValue(v('CustomColor', DEFAULTS.customColor)),
       battery: v('Battery', DEFAULTS.battery),
       seconds: !!v('Seconds', DEFAULTS.seconds),
-      countdownDetail: v('CountdownDetail', DEFAULTS.countdownDetail)
+      countdownDetail: v('CountdownDetail', DEFAULTS.countdownDetail),
+      bgColor: v('BgColor', DEFAULTS.bgColor),
+      customBg: colorValue(v('CustomBg', DEFAULTS.customBg)),
+      weather: v('Weather', DEFAULTS.weather),
+      tempUnits: v('TempUnits', DEFAULTS.tempUnits)
     };
+    var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     // Switch the theme right away; the game follows once the fetch is back.
     send(displayMessage(s));
+    if (s.weather !== old.weather || s.tempUnits !== old.tempUnits) fetchWeather(s, true);
     fetchGame();
   });
 }
@@ -362,5 +462,5 @@ if (typeof Pebble !== 'undefined') {
 if (typeof module !== 'undefined' && typeof Pebble === 'undefined') {
   module.exports = { parseTicker: parseTicker, pickGame: pickGame,
                      gameMessage: gameMessage, refreshDelay: refreshDelay,
-                     DEFAULTS: DEFAULTS };
+                     weatherIcon: weatherIcon, DEFAULTS: DEFAULTS };
 }

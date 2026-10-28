@@ -18,7 +18,13 @@ emulator, so spacing on a real watch will differ slightly.
 - Time (12/24 hour follows the watch setting), with optional seconds in a
   smaller font, plus the date and a large team logo
 - Team color themes: background, plus a game bar in the team's primary or
-  secondary color, or any custom color
+  secondary color, or any custom color. The background can be a custom color
+  too; with a light one the time and date turn black
+- Optional weather where your phone is: the temperature, with or without a
+  small icon (sun, moon, partly cloudy day or night, cloudy, fog, rain, snow,
+  storm). Top left on rectangular watches; on round ones it goes before the
+  date, which drops the month to make room. Hidden if it hasn't updated in 2
+  hours
 - Battery indicator: top right (top center on round watches). On color
   watches it turns yellow at 40% or less, red at 20% or less, and green while
   charging
@@ -44,6 +50,10 @@ emulator, so spacing on a real watch will differ slightly.
 | Layout | Big team logo / Split view (only with a team picked) | Big team logo |
 | Game bar color (color watches) | Team primary / Team secondary / Custom | Team primary |
 | Custom bar color | Any Pebble color, used when the bar color is Custom | Teal (`00AAAA`) |
+| Background color (color watches) | Team color / Custom (selected team only, in split view too) | Team color |
+| Custom background color | Any Pebble color, used when the background is Custom | Black |
+| Show weather | Off / Temperature / Temperature and icon | Off |
+| Units | Fahrenheit / Celsius | Fahrenheit |
 | Show seconds | On / off | Off |
 | Show battery | Always / When low (40% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |
@@ -69,6 +79,11 @@ last game is saved on the watch, so the face isn't blank on start.
 | Showing a final | Every 30 minutes |
 | Fetch error | 15 minutes |
 
+With weather on, the watch asks at least every 30 minutes, and the phone
+fetches the weather from [Open-Meteo](https://open-meteo.com/) (free, no key)
+when it's at least 25 minutes old. The phone's location is rounded to about a
+kilometer before it's sent.
+
 The face redraws once a minute. It switches to every second only while
 something on screen shows seconds: the clock with seconds on, or a running
 countdown set to seconds. That costs noticeably more battery, which is why
@@ -83,7 +98,7 @@ phone does the web request.
 | File | Purpose |
 | --- | --- |
 | `src/c/main.c` | Watchface: layout per screen shape, team table (background, primary and secondary bar colors, abbreviations), drawing, AppMessage handling |
-| `src/pkjs/index.js` | Phone side: fetches and parses the ticker, picks the game, formats start times |
+| `src/pkjs/index.js` | Phone side: fetches and parses the ticker, picks the game, formats start times, fetches the weather |
 | `src/pkjs/config.js` | Settings page ([Clay](https://github.com/pebble-dev/clay)) |
 | `src/pkjs/teams.js` | Team names, full names and arena time zones |
 | `logos_src/` | Full-size team logos (from the ticker's image links) |
@@ -140,6 +155,10 @@ If a logo is mostly black or the team's background color, add a swap to
 - Not yet run in the emulator or on a watch. The C code has been
   type-checked against a stub header, and the phone code tested in Node
   against the live ticker and a made-up live/final game.
+- Weather and custom background are type-checked and the weather fetch was
+  tested in Node against the live Open-Meteo API, but their placement on
+  screen (especially the weather next to the date on round watches) needs a
+  look in the emulator.
 - Score, live and final parsing are untested against real games until the
   season starts (Nov 27, 2026). Same caveat as MASL Scores.
 - The ticker lists about a month of games (20 as of Oct 27, 2026). A team with

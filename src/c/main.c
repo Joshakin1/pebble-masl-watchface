@@ -8,14 +8,14 @@
 // The phone picks the game and sends it in one AppMessage, with the number of
 // minutes until the face should ask again (sooner while a game is live).
 // The last message is kept in persistent storage so the face isn't blank on
-// start.
+// start. Weather, when on, comes in its own message.
 
 #include <pebble.h>
 
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 4
+#define PERSIST_VERSION 5
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -27,6 +27,11 @@ enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
 // How finely the countdown counts: "in 3d 4h", "in 3d 4h 12m" or
 // "3d 04:12:30".
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
+enum { BG_TEAM, BG_CUSTOM };
+enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON };
+// Weather icons. Keep in sync with WX_* in src/pkjs/index.js.
+enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG,
+       WX_RAIN, WX_SNOW, WX_STORM };
 
 // Seconds sit after the time in a smaller font, bottoms lined up. Offsets
 // are from the LECO fonts' line boxes; adjust here if they look off.
@@ -37,6 +42,14 @@ enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 // "when low" setting) and critical (shown in red).
 #define BATTERY_LOW_PERCENT 40
 #define BATTERY_CRITICAL_PERCENT 20
+
+// Space between the weather and the date, and between the icon and the
+// temperature.
+#define WEATHER_GAP 4
+#define ICON_GAP 2
+// Weather older than this many seconds is hidden: the phone sends it every
+// 30 minutes, so this means it has lost touch.
+#define WEATHER_STALE (2 * 3600)
 
 typedef struct {
   char team[12];    // selected team's short name, "" for the league's next game
@@ -57,6 +70,12 @@ typedef struct {
   int32_t bar_color;   // hex color for BAR_CUSTOM
   uint8_t seconds;     // 1 to show seconds on the clock
   uint8_t countdown;   // COUNTDOWN_*
+  uint8_t bg_style;    // BG_*: the selected team's background
+  int32_t bg_color;    // hex color for BG_CUSTOM
+  uint8_t weather;     // WEATHER_*: what weather to show
+  uint8_t wx_icon;     // WX_*
+  int16_t temp;        // in the units chosen in settings
+  int32_t weather_time;  // when the weather arrived, 0 if never
 } Game;
 
 typedef struct {
@@ -86,11 +105,18 @@ static const Team s_teams[] = {
 
 // Where everything goes on this screen. Logo boxes match the image sizes in
 // tools/convert_logos.py.
+//
+// Weather goes in the top left corner on rectangular screens. Round ones
+// have no corner, so there it goes in the date line, before the date.
 typedef struct {
   GRect date, logo, time, line1, line2, battery;
   int16_t bar_y;
   int16_t half_dx;  // distance from the center to each half logo's center
-  GFont date_font, time_font, line1_font, line2_font;
+  bool round;
+  int16_t wx_x, wx_y;  // weather icon's top left (wx_x unused on round screens)
+  int16_t wx_size;     // weather icon's width and height
+  int16_t temp_y;      // top of the temperature's text box
+  GFont date_font, time_font, line1_font, line2_font, temp_font;
 } Layout;
 
 static Window *s_window;
@@ -129,9 +155,14 @@ static void team_code(const char *name, char *out, size_t size) {
 }
 
 #ifdef PBL_COLOR
-// A team's background color, or black for a team not in s_teams.
+// A team's background color, or black for a team not in s_teams. The
+// selected team uses the custom color from settings when chosen.
 static GColor team_bg(const Team *t) {
-  return t ? GColorFromHEX(t->bg) : GColorBlack;
+  if (!t) return GColorBlack;
+  if (s_game.bg_style == BG_CUSTOM && strcmp(t->name, s_game.team) == 0) {
+    return GColorFromHEX(s_game.bg_color);
+  }
+  return GColorFromHEX(t->bg);
 }
 #endif
 
@@ -164,28 +195,36 @@ static void set_layout(GRect b) {
     *l = (Layout){ .date = GRect(0, 20, w, 30), .logo = GRect(0, 50, w, 110),
                    .time = GRect(0, 152, w, 52), .bar_y = 206,
                    .line1 = GRect(40, 203, w - 80, 22), .line2 = GRect(40, 220, w - 80, 30),
-                   .half_dx = 56, .battery = GRect(w / 2 - 10, 6, 20, 10) };
+                   .half_dx = 56, .battery = GRect(w / 2 - 10, 6, 20, 10),
+                   .round = true, .wx_y = 28, .wx_size = 16, .temp_y = 20 };
   } else if (w >= 200) {  // emery, 200x228
     *l = (Layout){ .date = GRect(0, -4, w, 30), .logo = GRect(0, 26, w, 106),
                    .time = GRect(0, 124, w, 52), .bar_y = 182,
                    .line1 = GRect(4, 179, w - 8, 22), .line2 = GRect(4, 196, w - 8, 30),
-                   .half_dx = 50, .battery = GRect(w - 26, 7, 20, 10) };
+                   .half_dx = 50, .battery = GRect(w - 26, 7, 20, 10),
+                   .wx_x = 6, .wx_y = 4, .wx_size = 16, .temp_y = 0 };
   } else if (w >= 180) {  // chalk, 180x180 round
     *l = (Layout){ .date = GRect(0, 10, w, 22), .logo = GRect(0, 31, w, 68),
                    .time = GRect(0, 88, w, 50), .bar_y = 140,
                    .line1 = GRect(25, 137, w - 50, 16), .line2 = GRect(25, 150, w - 50, 22),
-                   .half_dx = 38, .battery = GRect(w / 2 - 8, 2, 16, 8) };
+                   .half_dx = 38, .battery = GRect(w / 2 - 8, 2, 16, 8),
+                   .round = true, .wx_y = 16, .wx_size = 12, .temp_y = 10 };
   } else {                // basalt, diorite, flint, 144x168
     *l = (Layout){ .date = GRect(0, -3, w, 22), .logo = GRect(0, 20, w, 74),
                    .time = GRect(0, 84, w, 50), .bar_y = 136,
                    .line1 = GRect(2, 133, w - 4, 16), .line2 = GRect(2, 146, w - 4, 22),
-                   .half_dx = 36, .battery = GRect(w - 19, 4, 16, 8) };
+                   .half_dx = 36, .battery = GRect(w - 19, 4, 16, 8),
+                   .wx_x = 3, .wx_y = 2, .wx_size = 12, .temp_y = -2 };
   }
   bool large = w >= 200;
   l->date_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
   l->time_font = fonts_get_system_font(FONT_KEY_LECO_42_NUMBERS);
   l->line1_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD);
   l->line2_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
+  // In the date line on round screens, so it matches the date there.
+  l->temp_font = l->round ? l->date_font
+                          : fonts_get_system_font(large ? FONT_KEY_GOTHIC_18_BOLD
+                                                        : FONT_KEY_GOTHIC_14_BOLD);
 }
 
 // ---------------------------------------------------------------------------
@@ -392,14 +431,16 @@ static GColor battery_color(BatteryChargeState b, GColor fg) {
   return fg;
 }
 
+static bool battery_shown(BatteryChargeState b) {
+  bool low = b.charge_percent <= BATTERY_LOW_PERCENT;
+  return s_game.battery == BATTERY_ALWAYS ||
+         (s_game.battery == BATTERY_LOW && (low || b.is_charging));
+}
+
 // A battery outline with a nub on the right, filled to the charge level.
 static void draw_battery(GContext *ctx, GRect r, GColor fg) {
   BatteryChargeState b = battery_state_service_peek();
-  bool low = b.charge_percent <= BATTERY_LOW_PERCENT;
-  if (s_game.battery == BATTERY_NEVER ||
-      (s_game.battery == BATTERY_LOW && !low && !b.is_charging)) {
-    return;
-  }
+  if (!battery_shown(b)) return;
   GRect body = GRect(r.origin.x, r.origin.y, r.size.w - 2, r.size.h);
   graphics_context_set_stroke_color(ctx, fg);
   graphics_draw_rect(ctx, body);
@@ -412,6 +453,150 @@ static void draw_battery(GContext *ctx, GRect r, GColor fg) {
                                 body.size.h - 4), 0, GCornerNone);
 }
 
+// ---------------------------------------------------------------------------
+// Weather. The icons are drawn rather than stored as images so they work in
+// any color on every screen. Each fits in a square box `s` pixels wide.
+
+static bool weather_shown(void) {
+  return s_game.weather != WEATHER_OFF && s_game.weather_time &&
+         time(NULL) - s_game.weather_time < WEATHER_STALE;
+}
+
+static bool icon_shown(void) {
+  return s_game.weather == WEATHER_ICON && s_game.wx_icon != WX_NONE;
+}
+
+// A sun: a disc of radius r with eight rays reaching out to `reach`.
+static void draw_sun(GContext *ctx, GPoint c, int16_t r, int16_t reach) {
+  // Ray directions, in tenths.
+  static const int8_t dirs[8][2] = {
+    { 10, 0 }, { 7, 7 }, { 0, 10 }, { -7, 7 }, { -10, 0 }, { -7, -7 }, { 0, -10 }, { 7, -7 },
+  };
+  graphics_fill_circle(ctx, c, r);
+  int16_t in = r + 2;
+  for (int i = 0; i < 8; i++) {
+    graphics_draw_line(ctx, GPoint(c.x + dirs[i][0] * in / 10, c.y + dirs[i][1] * in / 10),
+                       GPoint(c.x + dirs[i][0] * reach / 10, c.y + dirs[i][1] * reach / 10));
+  }
+}
+
+// A crescent: a disc with a background-colored disc taken out of its upper
+// right.
+static void draw_moon(GContext *ctx, GPoint c, int16_t r, GColor fg, GColor bg) {
+  graphics_context_set_fill_color(ctx, fg);
+  graphics_fill_circle(ctx, c, r);
+  graphics_context_set_fill_color(ctx, bg);
+  graphics_fill_circle(ctx, GPoint(c.x + r / 2 + 1, c.y - r / 3), r - 1);
+  graphics_context_set_fill_color(ctx, fg);
+}
+
+// A cloud filling r: a flat-bottomed base with a big lump and a small one.
+static void fill_cloud(GContext *ctx, GRect r) {
+  int16_t x = r.origin.x, y = r.origin.y, w = r.size.w, h = r.size.h;
+  int16_t base_h = h - h / 2;
+  graphics_fill_rect(ctx, GRect(x, y + h / 2, w, base_h), base_h / 2, GCornersAll);
+  graphics_fill_circle(ctx, GPoint(x + w * 3 / 5, y + h / 2), (h - 1) / 2);
+  graphics_fill_circle(ctx, GPoint(x + w * 3 / 10, y + h * 3 / 5), h * 3 / 10);
+}
+
+// A small sun or moon peeking out from behind a cloud. The cloud gets a
+// background-colored edge so the two don't run together.
+static void draw_partly(GContext *ctx, int16_t x, int16_t y, int16_t s, bool night,
+                        GColor fg, GColor bg) {
+  GPoint c = GPoint(x + s * 2 / 3, y + s / 3);
+  if (night) {
+    draw_moon(ctx, c, s / 3, fg, bg);
+  } else {
+    draw_sun(ctx, c, s / 5, s / 3 + 1);
+  }
+  GRect cloud = GRect(x, y + s * 5 / 12, s * 5 / 6, s - s * 5 / 12);
+  graphics_context_set_fill_color(ctx, bg);
+  fill_cloud(ctx, grect_inset(cloud, GEdgeInsets(-1)));
+  graphics_context_set_fill_color(ctx, fg);
+  fill_cloud(ctx, cloud);
+}
+
+static void draw_weather_icon(GContext *ctx, int16_t x, int16_t y, int16_t s, GColor fg,
+                              GColor bg) {
+  graphics_context_set_fill_color(ctx, fg);
+  graphics_context_set_stroke_color(ctx, fg);
+  // Rain and snow hang below a cloud in the top part of the box.
+  int16_t cloud_h = s * 7 / 12;
+  int16_t top = y + cloud_h + 1, bottom = y + s - 1;
+  switch (s_game.wx_icon) {
+    case WX_SUN:
+      draw_sun(ctx, GPoint(x + s / 2, y + s / 2), s / 5, s / 2 - 1);
+      break;
+    case WX_MOON:
+      draw_moon(ctx, GPoint(x + s / 2, y + s / 2), s / 2 - 1, fg, bg);
+      break;
+    case WX_PARTLY_SUN:
+    case WX_PARTLY_MOON:
+      draw_partly(ctx, x, y, s, s_game.wx_icon == WX_PARTLY_MOON, fg, bg);
+      break;
+    case WX_CLOUD:
+      fill_cloud(ctx, GRect(x, y + s / 6, s, s * 2 / 3));
+      break;
+    case WX_FOG: {
+      int16_t thick = s / 8 > 1 ? s / 8 : 1;
+      for (int i = 1; i <= 3; i++) {
+        graphics_fill_rect(ctx, GRect(x + (i == 2 ? 2 : 0), y + s * i / 4 - 1, s - 2, thick),
+                           0, GCornerNone);
+      }
+      break;
+    }
+    case WX_RAIN:
+    case WX_SNOW:
+      fill_cloud(ctx, GRect(x, y, s, cloud_h));
+      for (int i = 1; i <= 3; i++) {
+        int16_t dx = x + s * i / 4;
+        if (s_game.wx_icon == WX_RAIN) {
+          graphics_draw_line(ctx, GPoint(dx, top), GPoint(dx - s / 8, bottom));
+        } else {
+          graphics_fill_rect(ctx, GRect(dx - 1, i == 2 ? bottom - 1 : top, 2, 2), 0, GCornerNone);
+        }
+      }
+      break;
+    case WX_STORM: {
+      // A shorter cloud, to leave room for a two pixel wide bolt.
+      fill_cloud(ctx, GRect(x, y, s, s / 2));
+      top = y + s / 2 + 1;
+      int16_t mid = (top + bottom) / 2;
+      for (int16_t cx = x + s / 2; cx <= x + s / 2 + 1; cx++) {
+        graphics_draw_line(ctx, GPoint(cx + 1, top), GPoint(cx - 1, mid));
+        graphics_draw_line(ctx, GPoint(cx - 1, mid), GPoint(cx + 1, mid));
+        graphics_draw_line(ctx, GPoint(cx + 1, mid), GPoint(cx - 1, bottom));
+      }
+      break;
+    }
+  }
+}
+
+static int16_t text_width(const char *text, GFont font) {
+  return graphics_text_layout_get_content_size(text, font, GRect(0, 0, 300, 60),
+                                               GTextOverflowModeFill, GTextAlignmentLeft).w;
+}
+
+// Width of the weather: the icon (when on) and the temperature.
+static int16_t weather_width(const char *temp) {
+  const Layout *l = &s_layout;
+  return (icon_shown() ? l->wx_size + ICON_GAP : 0) + text_width(temp, l->temp_font);
+}
+
+// The weather with its left edge at x. bg is the background behind it, for
+// the icons that cut shapes out.
+static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, GColor bg) {
+  const Layout *l = &s_layout;
+  if (icon_shown()) {
+    draw_weather_icon(ctx, x, l->wx_y, l->wx_size, fg, bg);
+    x += l->wx_size + ICON_GAP;
+  }
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, temp, l->temp_font,
+                     GRect(x, l->temp_y, text_width(temp, l->temp_font) + 4, l->date.size.h),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
 static void canvas_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
   const Layout *l = &s_layout;
@@ -422,37 +607,57 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // The bar color comes from bar_color().
 #ifdef PBL_COLOR
   const Team *team = find_team(s_game.team);
-  if (matchup) {
-    const Team *away = find_team(s_game.away), *home = find_team(s_game.home);
-    graphics_context_set_fill_color(ctx, team_bg(away));
-    graphics_fill_rect(ctx, GRect(0, 0, cx, b.size.h), 0, GCornerNone);
-    graphics_context_set_fill_color(ctx, team_bg(home));
-    graphics_fill_rect(ctx, GRect(cx, 0, b.size.w - cx, b.size.h), 0, GCornerNone);
-  } else {
-    graphics_context_set_fill_color(ctx, team_bg(team));
-    graphics_fill_rect(ctx, b, 0, GCornerNone);
-  }
-  GColor fg = GColorWhite;
+  GColor left_bg = team_bg(matchup ? find_team(s_game.away) : team);
+  GColor right_bg = matchup ? team_bg(find_team(s_game.home)) : left_bg;
+  // Text on the background is white unless both sides are light enough for
+  // black (only possible with a custom background).
+  GColor fg = text_on(left_bg);
+  if (!gcolor_equal(fg, text_on(right_bg))) fg = GColorWhite;
   GColor bar = bar_color(team);
 #else
-  graphics_context_set_fill_color(ctx, GColorWhite);
-  graphics_fill_rect(ctx, b, 0, GCornerNone);
-  GColor fg = GColorBlack;
+  GColor left_bg = GColorWhite, right_bg = GColorWhite, fg = GColorBlack;
   GColor bar = bar_color(NULL);
 #endif
+  graphics_context_set_fill_color(ctx, left_bg);
+  graphics_fill_rect(ctx, GRect(0, 0, cx, b.size.h), 0, GCornerNone);
+  graphics_context_set_fill_color(ctx, right_bg);
+  graphics_fill_rect(ctx, GRect(cx, 0, b.size.w - cx, b.size.h), 0, GCornerNone);
   graphics_context_set_fill_color(ctx, bar);
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
 
-  // Date and time
+  // Date and weather. Round screens drop the month to fit the weather in the
+  // date line; elsewhere the date moves right if it would run into it.
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
-  char date[16], clock[8];
-  strftime(date, sizeof(date), "%a %b", t);
+  bool weather = weather_shown();
+  char date[16], clock[8], temp[8];
+  strftime(date, sizeof(date), weather && l->round ? "%a" : "%a %b", t);
   upcase(date);
   snprintf(date + strlen(date), sizeof(date) - strlen(date), " %d", t->tm_mday);
+  GRect date_box = l->date;
+  if (weather) {
+    snprintf(temp, sizeof(temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
+    int16_t ww = weather_width(temp), dw = text_width(date, l->date_font);
+    int16_t x;
+    if (l->round) {
+      x = cx - (ww + WEATHER_GAP + dw) / 2;
+      date_box = GRect(x + ww + WEATHER_GAP - 2, l->date.origin.y, dw + 4, l->date.size.h);
+    } else {
+      x = l->wx_x;
+      int16_t left = x + ww + WEATHER_GAP;
+      int16_t right = battery_shown(battery_state_service_peek()) ? l->battery.origin.x
+                                                                   : b.size.w;
+      if ((b.size.w - dw) / 2 < left) {
+        date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
+      }
+    }
+    draw_weather(ctx, x, temp, fg, x < cx ? left_bg : right_bg);
+  }
+  draw_text(ctx, date, l->date_font, date_box, fg);
+
+  // Time
   strftime(clock, sizeof(clock), clock_is_24h_style() ? "%H:%M" : "%I:%M", t);
   const char *clock_text = clock[0] == '0' && !clock_is_24h_style() ? clock + 1 : clock;
-  draw_text(ctx, date, l->date_font, l->date, fg);
   draw_clock(ctx, clock_text, t->tm_sec, fg);
   draw_battery(ctx, l->battery, fg);
 
@@ -536,6 +741,14 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_Battery, &n)) s_game.battery = n;
   if (read_int(it, MESSAGE_KEY_Seconds, &n)) s_game.seconds = n;
   if (read_int(it, MESSAGE_KEY_CountdownDetail, &n)) s_game.countdown = n;
+  if (read_int(it, MESSAGE_KEY_BgColor, &n)) s_game.bg_style = n;
+  if (read_int(it, MESSAGE_KEY_CustomBg, &n)) s_game.bg_color = n;
+  if (read_int(it, MESSAGE_KEY_Weather, &n)) s_game.weather = n;
+  if (read_int(it, MESSAGE_KEY_WeatherIcon, &n)) s_game.wx_icon = n;
+  if (read_int(it, MESSAGE_KEY_Temp, &n)) {
+    s_game.temp = n;
+    s_game.weather_time = time(NULL);
+  }
   if (read_int(it, MESSAGE_KEY_State, &n)) s_game.state = n;
   if (read_int(it, MESSAGE_KEY_Start, &n)) s_game.start = n;
   if (read_int(it, MESSAGE_KEY_AwayScore, &n)) s_game.away_score = n;
