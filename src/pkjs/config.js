@@ -129,7 +129,7 @@ module.exports = [
         defaultValue: 'always',
         options: [
           { label: 'Always', value: 'always' },
-          { label: 'When low (20% or less) or charging', value: 'low' },
+          { label: 'When low (40% or less) or charging', value: 'low' },
           { label: 'Never', value: 'never' }
         ]
       }

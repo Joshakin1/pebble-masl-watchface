@@ -19,8 +19,9 @@ emulator, so spacing on a real watch will differ slightly.
   smaller font, plus the date and a large team logo
 - Team color themes: background, plus a game bar in the team's primary or
   secondary color, or any custom color
-- Battery indicator: top right (top center on round watches), red at 20% or
-  less and green while charging on color watches
+- Battery indicator: top right (top center on round watches). On color
+  watches it turns yellow at 40% or less, red at 20% or less, and green while
+  charging
 - Split view: your team's next game with both logos, the background split
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
@@ -44,7 +45,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Game bar color (color watches) | Team primary / Team secondary / Custom | Team primary |
 | Custom bar color | Any Pebble color, used when the bar color is Custom | Teal (`00AAAA`) |
 | Show seconds | On / off | Off |
-| Show battery | Always / When low (20% or less) or charging / Never | Always |
+| Show battery | Always / When low (40% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |
 | Show | Start time / Countdown to start | Start time |
 | Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |

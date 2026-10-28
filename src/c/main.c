@@ -33,9 +33,10 @@ enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 #define SECONDS_GAP 2
 #define SECONDS_DY 21
 
-// Battery level at or below which it counts as low (shown in red, and shown
-// at all with the "when low" setting).
-#define BATTERY_LOW_PERCENT 20
+// Battery levels, at or below: low (shown in yellow, and shown at all with the
+// "when low" setting) and critical (shown in red).
+#define BATTERY_LOW_PERCENT 40
+#define BATTERY_CRITICAL_PERCENT 20
 
 typedef struct {
   char team[12];    // selected team's short name, "" for the league's next game
@@ -380,8 +381,18 @@ static void draw_clock(GContext *ctx, const char *clock, int sec, GColor fg) {
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
-// A battery outline with a nub on the right, filled to the charge level: red
-// when low, green while charging (color watches).
+// The battery's fill color: green while charging, then red when critical and
+// yellow when low (color watches).
+static GColor battery_color(BatteryChargeState b, GColor fg) {
+#ifdef PBL_COLOR
+  if (b.is_charging) return GColorGreen;
+  if (b.charge_percent <= BATTERY_CRITICAL_PERCENT) return GColorRed;
+  if (b.charge_percent <= BATTERY_LOW_PERCENT) return GColorYellow;
+#endif
+  return fg;
+}
+
+// A battery outline with a nub on the right, filled to the charge level.
 static void draw_battery(GContext *ctx, GRect r, GColor fg) {
   BatteryChargeState b = battery_state_service_peek();
   bool low = b.charge_percent <= BATTERY_LOW_PERCENT;
@@ -396,8 +407,7 @@ static void draw_battery(GContext *ctx, GRect r, GColor fg) {
   graphics_fill_rect(ctx, GRect(body.origin.x + body.size.w, r.origin.y + r.size.h / 4, 2,
                                 r.size.h - r.size.h / 4 * 2), 0, GCornerNone);
   int fill = (body.size.w - 4) * b.charge_percent / 100;
-  graphics_context_set_fill_color(
-      ctx, PBL_IF_COLOR_ELSE(b.is_charging ? GColorGreen : low ? GColorRed : fg, fg));
+  graphics_context_set_fill_color(ctx, battery_color(b, fg));
   graphics_fill_rect(ctx, GRect(body.origin.x + 2, body.origin.y + 2, fill > 0 ? fill : 1,
                                 body.size.h - 4), 0, GCornerNone);
 }
