@@ -33,7 +33,7 @@ var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
   team: '', view: 'logo', homeOnly: false, mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
-  battery: 'always'
+  battery: 'always', seconds: false, countdownDetail: 'hours'
 };
 
 function loadSettings() {
@@ -219,7 +219,10 @@ function displayMessage(s) {
            Mode: s.mode === 'countdown' ? 1 : 0,
            BarColor: Math.max(0, ['primary', 'secondary', 'custom'].indexOf(s.barColor)),
            CustomColor: s.customColor,
-           Battery: Math.max(0, ['always', 'low', 'never'].indexOf(s.battery)) };
+           Battery: Math.max(0, ['always', 'low', 'never'].indexOf(s.battery)),
+           Seconds: s.seconds ? 1 : 0,
+           CountdownDetail:
+             Math.max(0, ['hours', 'minutes', 'seconds'].indexOf(s.countdownDetail)) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -344,7 +347,9 @@ if (typeof Pebble !== 'undefined') {
       liveInterval: +v('LiveInterval', DEFAULTS.liveInterval),
       barColor: v('BarColor', DEFAULTS.barColor),
       customColor: colorValue(v('CustomColor', DEFAULTS.customColor)),
-      battery: v('Battery', DEFAULTS.battery)
+      battery: v('Battery', DEFAULTS.battery),
+      seconds: !!v('Seconds', DEFAULTS.seconds),
+      countdownDetail: v('CountdownDetail', DEFAULTS.countdownDetail)
     };
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     // Switch the theme right away; the game follows once the fetch is back.

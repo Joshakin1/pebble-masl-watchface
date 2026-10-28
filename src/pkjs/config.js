@@ -52,6 +52,19 @@ module.exports = [
       },
       {
         type: 'select',
+        messageKey: 'CountdownDetail',
+        label: 'Countdown shows',
+        description: 'Seconds update every second while the countdown runs, which ' +
+                     'uses more battery.',
+        defaultValue: 'hours',
+        options: [
+          { label: 'Days and hours (in 3d 4h)', value: 'hours' },
+          { label: 'Down to minutes (in 3d 4h 12m)', value: 'minutes' },
+          { label: 'Down to seconds (3d 04:12:30)', value: 'seconds' }
+        ]
+      },
+      {
+        type: 'select',
         messageKey: 'TimeZone',
         label: 'Start times in',
         description: 'MASL lists every game in Eastern time.',
@@ -89,6 +102,19 @@ module.exports = [
         description: 'Used when the game bar color is Custom.',
         defaultValue: '00AAAA',
         sunlight: false
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      { type: 'heading', defaultValue: 'Clock' },
+      {
+        type: 'toggle',
+        messageKey: 'Seconds',
+        label: 'Show seconds',
+        description: 'Redraws the face every second, which uses noticeably more battery.',
+        defaultValue: false
       }
     ]
   },

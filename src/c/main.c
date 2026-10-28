@@ -15,7 +15,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 3
+#define PERSIST_VERSION 4
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -24,6 +24,14 @@ enum { STATE_NONE, STATE_SCHEDULED, STATE_LIVE, STATE_FINAL };
 enum { MODE_START_TIME, MODE_COUNTDOWN };
 enum { BAR_PRIMARY, BAR_SECONDARY, BAR_CUSTOM };
 enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
+// How finely the countdown counts: "in 3d 4h", "in 3d 4h 12m" or
+// "3d 04:12:30".
+enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
+
+// Seconds sit after the time in a smaller font, bottoms lined up. Offsets
+// are from the LECO fonts' line boxes; adjust here if they look off.
+#define SECONDS_GAP 2
+#define SECONDS_DY 21
 
 // Battery level at or below which it counts as low (shown in red, and shown
 // at all with the "when low" setting).
@@ -46,6 +54,8 @@ typedef struct {
   uint8_t bar_style;   // BAR_*: which color the game bar uses
   uint8_t battery;     // BATTERY_*: when to show the battery
   int32_t bar_color;   // hex color for BAR_CUSTOM
+  uint8_t seconds;     // 1 to show seconds on the clock
+  uint8_t countdown;   // COUNTDOWN_*
 } Game;
 
 typedef struct {
@@ -88,6 +98,9 @@ static Layout s_layout;
 static Game s_game;
 static GBitmap *s_logo, *s_away_logo, *s_home_logo;
 static int s_refresh_in = DEFAULT_REFRESH;
+static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before init
+
+static void update_tick_unit(void);
 
 static const Team *find_team(const char *name) {
   for (int i = 0; i < NUM_TEAMS; i++) {
@@ -240,15 +253,34 @@ static bool is_today(time_t when) {
   return today.tm_year == then.tm_year && today.tm_yday == then.tm_yday;
 }
 
-static void format_countdown(char *buf, size_t size, int32_t start) {
+static bool countdown_running(void) {
+  return s_game.state == STATE_SCHEDULED && s_game.mode == MODE_COUNTDOWN &&
+         s_game.start > (int32_t)time(NULL);
+}
+
+static void format_countdown(char *buf, size_t size, int32_t start, uint8_t detail) {
   int32_t secs = start - (int32_t)time(NULL);
   if (secs <= 0) {
     snprintf(buf, size, "Starting");
     return;
   }
+  if (detail == COUNTDOWN_SECONDS) {
+    int days = secs / 86400, hours = secs / 3600 % 24, mins = secs / 60 % 60;
+    if (days > 0) {
+      // No "in": this one is the widest and gets clipped on round screens.
+      snprintf(buf, size, "%dd %02d:%02d:%02d", days, hours, mins, (int)(secs % 60));
+    } else if (hours > 0) {
+      snprintf(buf, size, "in %d:%02d:%02d", hours, mins, (int)(secs % 60));
+    } else {
+      snprintf(buf, size, "in %d:%02d", mins, (int)(secs % 60));
+    }
+    return;
+  }
   int mins = (secs + 59) / 60;
   int days = mins / (24 * 60), hours = mins / 60 % 24;
-  if (days > 0) {
+  if (days > 0 && detail == COUNTDOWN_MINUTES) {
+    snprintf(buf, size, "in %dd %dh %02dm", days, hours, mins % 60);
+  } else if (days > 0) {
     snprintf(buf, size, "in %dd %dh", days, hours);
   } else if (hours > 0) {
     snprintf(buf, size, "in %dh %02dm", hours, mins % 60);
@@ -284,7 +316,7 @@ static void format_lines(char *l1, size_t n1, char *l2, size_t n2) {
         snprintf(l1, n1, "%s", who);
       }
       if (g->mode == MODE_COUNTDOWN && g->start) {
-        format_countdown(l2, n2, g->start);
+        format_countdown(l2, n2, g->start, g->countdown);
       } else {
         snprintf(l2, n2, "%s", g->time);
       }
@@ -320,6 +352,33 @@ static void draw_text(GContext *ctx, const char *text, GFont font, GRect r, GCol
 
 // ---------------------------------------------------------------------------
 // Drawing
+
+// The time, followed by seconds in a smaller font when they're on. The two
+// are centered together.
+static void draw_clock(GContext *ctx, const char *clock, int sec, GColor fg) {
+  const Layout *l = &s_layout;
+  if (!s_game.seconds) {
+    draw_text(ctx, clock, l->time_font, l->time, fg);
+    return;
+  }
+  char secs[4];
+  snprintf(secs, sizeof(secs), "%02d", sec);
+  GFont small = fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS);
+  GSize big_size = graphics_text_layout_get_content_size(
+      clock, l->time_font, l->time, GTextOverflowModeFill, GTextAlignmentLeft);
+  GSize small_size = graphics_text_layout_get_content_size(
+      secs, small, l->time, GTextOverflowModeFill, GTextAlignmentLeft);
+  int16_t x = l->time.origin.x +
+              (l->time.size.w - big_size.w - SECONDS_GAP - small_size.w) / 2;
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, clock, l->time_font,
+                     GRect(x, l->time.origin.y, big_size.w + 4, l->time.size.h),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+  graphics_draw_text(ctx, secs, small,
+                     GRect(x + big_size.w + SECONDS_GAP, l->time.origin.y + SECONDS_DY,
+                           small_size.w + 4, 26),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
 
 // A battery outline with a nub on the right, filled to the charge level: red
 // when low, green while charging (color watches).
@@ -384,7 +443,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   strftime(clock, sizeof(clock), clock_is_24h_style() ? "%H:%M" : "%I:%M", t);
   const char *clock_text = clock[0] == '0' && !clock_is_24h_style() ? clock + 1 : clock;
   draw_text(ctx, date, l->date_font, l->date, fg);
-  draw_text(ctx, clock_text, l->time_font, l->time, fg);
+  draw_clock(ctx, clock_text, t->tm_sec, fg);
   draw_battery(ctx, l->battery, fg);
 
   // Logos
@@ -465,6 +524,8 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_BarColor, &n)) s_game.bar_style = n;
   if (read_int(it, MESSAGE_KEY_CustomColor, &n)) s_game.bar_color = n;
   if (read_int(it, MESSAGE_KEY_Battery, &n)) s_game.battery = n;
+  if (read_int(it, MESSAGE_KEY_Seconds, &n)) s_game.seconds = n;
+  if (read_int(it, MESSAGE_KEY_CountdownDetail, &n)) s_game.countdown = n;
   if (read_int(it, MESSAGE_KEY_State, &n)) s_game.state = n;
   if (read_int(it, MESSAGE_KEY_Start, &n)) s_game.start = n;
   if (read_int(it, MESSAGE_KEY_AwayScore, &n)) s_game.away_score = n;
@@ -476,6 +537,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
     load_logos();
   }
   save_game();
+  update_tick_unit();
   layer_mark_dirty(s_canvas);
 }
 
@@ -487,11 +549,27 @@ static void inbox_dropped(AppMessageResult reason, void *context) {
 // Events
 
 static void tick_handler(struct tm *tick_time, TimeUnits changed) {
-  if (--s_refresh_in <= 0) {
-    s_refresh_in = DEFAULT_REFRESH;  // until the phone answers with its own delay
-    request_refresh();
+  if (changed & MINUTE_UNIT) {
+    if (--s_refresh_in <= 0) {
+      s_refresh_in = DEFAULT_REFRESH;  // until the phone answers with its own delay
+      request_refresh();
+    }
+    update_tick_unit();  // drop back to minutes once a seconds countdown ends
   }
   layer_mark_dirty(s_canvas);
+}
+
+// Tick every second only while something on screen shows seconds: the clock
+// with seconds on, or a running countdown set to seconds. Otherwise every
+// minute, which is much easier on the battery.
+static void update_tick_unit(void) {
+  bool seconds = s_game.seconds ||
+                 (s_game.countdown == COUNTDOWN_SECONDS && countdown_running());
+  TimeUnits unit = seconds ? SECOND_UNIT : MINUTE_UNIT;
+  if (unit == s_tick_unit) return;
+  s_tick_unit = unit;
+  tick_timer_service_unsubscribe();
+  tick_timer_service_subscribe(unit, tick_handler);
 }
 
 static void battery_handler(BatteryChargeState state) {
@@ -530,7 +608,7 @@ static void init(void) {
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_open(512, 64);
 
-  tick_timer_service_subscribe(MINUTE_UNIT, tick_handler);
+  update_tick_unit();
   battery_state_service_subscribe(battery_handler);
   connection_service_subscribe((ConnectionHandlers){
     .pebble_app_connection_handler = app_connection_handler,

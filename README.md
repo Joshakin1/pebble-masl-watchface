@@ -15,7 +15,8 @@ emulator, so spacing on a real watch will differ slightly.
 
 ## Features
 
-- Time (12/24 hour follows the watch setting), date, and a large team logo
+- Time (12/24 hour follows the watch setting), with optional seconds in a
+  smaller font, plus the date and a large team logo
 - Team color themes: background, plus a game bar in the team's primary or
   secondary color, or any custom color
 - Battery indicator: top right (top center on round watches), red at 20% or
@@ -26,7 +27,8 @@ emulator, so spacing on a real watch will differ slightly.
   split view with a black bar
 - Game bar:
   - Scheduled: `@ Wave - Sat 11/28` over the start time or a countdown
-    (`in 3d 4h`, `in 2h 05m`, `in 12m`). Shows `Today` on game day.
+    (`in 3d 4h`, `in 2h 05m`, `in 12m`; or down to minutes, `in 3d 4h 12m`;
+    or down to seconds, `3d 04:12:30` / `in 1:59:42`). Shows `Today` on game day.
   - Live: `LIVE - 2nd 4:12` over the score, or over the opponent in
     no-spoilers mode
   - Final (scores on only): `FINAL` over the score, for up to 6 hours after
@@ -41,9 +43,11 @@ emulator, so spacing on a real watch will differ slightly.
 | Layout | Big team logo / Split view (only with a team picked) | Big team logo |
 | Game bar color (color watches) | Team primary / Team secondary / Custom | Team primary |
 | Custom bar color | Any Pebble color, used when the bar color is Custom | Teal (`00AAAA`) |
+| Show seconds | On / off | Off |
 | Show battery | Always / When low (20% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |
 | Show | Start time / Countdown to start | Start time |
+| Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |
 | Start times in | Eastern (as listed) / My time zone / Home team's time zone | Eastern |
 | Show scores | Off = no spoilers: period and clock only, finals skipped | Off |
 | Update scores every | 1 / 2 / 5 minutes | 1 minute |
@@ -63,6 +67,11 @@ last game is saved on the watch, so the face isn't blank on start.
 | Live, scores off | Every 5 minutes (just to notice the end) |
 | Showing a final | Every 30 minutes |
 | Fetch error | 15 minutes |
+
+The face redraws once a minute. It switches to every second only while
+something on screen shows seconds: the clock with seconds on, or a running
+countdown set to seconds. That costs noticeably more battery, which is why
+both are off by default.
 
 Every minute during a live game is fine for battery: it's about 120 small
 messages over a two-hour game, and the face is idle the rest of the time. The

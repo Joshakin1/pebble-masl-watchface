@@ -32,6 +32,8 @@
       "BarColor",
       "CustomColor",
       "Battery",
+      "Seconds",
+      "CountdownDetail",
       "Away",
       "Home",
       "State",
