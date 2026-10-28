@@ -1,0 +1,794 @@
+{
+  "name": "masl-watchface",
+  "author": "Josh Wudtke",
+  "version": "1.0.0",
+  "keywords": [
+    "pebble-app"
+  ],
+  "private": true,
+  "dependencies": {
+    "@rebble/clay": "^1.1.0"
+  },
+  "pebble": {
+    "displayName": "MASL Watchface",
+    "uuid": "595c54fc-89d2-4a0c-a097-5ca9a370d817",
+    "sdkVersion": "3",
+    "enableMultiJS": true,
+    "targetPlatforms": [
+      "basalt",
+      "chalk",
+      "diorite",
+      "emery",
+      "flint",
+      "gabbro"
+    ],
+    "watchapp": {
+      "watchface": true
+    },
+    "messageKeys": [
+      "Team",
+      "Mode",
+      "View",
+      "Away",
+      "Home",
+      "State",
+      "Start",
+      "Day",
+      "Time",
+      "AwayScore",
+      "HomeScore",
+      "Detail",
+      "Status",
+      "Refresh",
+      "TimeZone",
+      "HomeOnly",
+      "ShowScores",
+      "LiveInterval"
+    ],
+    "resources": {
+      "media": [
+        {
+          "type": "bitmap",
+          "name": "LOGO_AMBUSH",
+          "file": "images/rect/logo_ambush.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_AMBUSH",
+          "file": "images/bw/logo_ambush.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_AMBUSH",
+          "file": "images/chalk/logo_ambush.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_AMBUSH",
+          "file": "images/emery/logo_ambush.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_AMBUSH",
+          "file": "images/gabbro/logo_ambush.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_AMBUSH",
+          "file": "images/rect/half_ambush.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_AMBUSH",
+          "file": "images/bw/half_ambush.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_AMBUSH",
+          "file": "images/chalk/half_ambush.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_AMBUSH",
+          "file": "images/emery/half_ambush.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_AMBUSH",
+          "file": "images/gabbro/half_ambush.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_BLAST",
+          "file": "images/rect/logo_blast.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_BLAST",
+          "file": "images/bw/logo_blast.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_BLAST",
+          "file": "images/chalk/logo_blast.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_BLAST",
+          "file": "images/emery/logo_blast.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_BLAST",
+          "file": "images/gabbro/logo_blast.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_BLAST",
+          "file": "images/rect/half_blast.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_BLAST",
+          "file": "images/bw/half_blast.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_BLAST",
+          "file": "images/chalk/half_blast.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_BLAST",
+          "file": "images/emery/half_blast.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_BLAST",
+          "file": "images/gabbro/half_blast.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_COMETS",
+          "file": "images/rect/logo_comets.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_COMETS",
+          "file": "images/bw/logo_comets.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_COMETS",
+          "file": "images/chalk/logo_comets.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_COMETS",
+          "file": "images/emery/logo_comets.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_COMETS",
+          "file": "images/gabbro/logo_comets.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_COMETS",
+          "file": "images/rect/half_comets.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_COMETS",
+          "file": "images/bw/half_comets.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_COMETS",
+          "file": "images/chalk/half_comets.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_COMETS",
+          "file": "images/emery/half_comets.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_COMETS",
+          "file": "images/gabbro/half_comets.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SOCKERS",
+          "file": "images/rect/logo_sockers.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SOCKERS",
+          "file": "images/bw/logo_sockers.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SOCKERS",
+          "file": "images/chalk/logo_sockers.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SOCKERS",
+          "file": "images/emery/logo_sockers.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SOCKERS",
+          "file": "images/gabbro/logo_sockers.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SOCKERS",
+          "file": "images/rect/half_sockers.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SOCKERS",
+          "file": "images/bw/half_sockers.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SOCKERS",
+          "file": "images/chalk/half_sockers.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SOCKERS",
+          "file": "images/emery/half_sockers.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SOCKERS",
+          "file": "images/gabbro/half_sockers.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SPIRITS",
+          "file": "images/rect/logo_spirits.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SPIRITS",
+          "file": "images/bw/logo_spirits.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SPIRITS",
+          "file": "images/chalk/logo_spirits.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SPIRITS",
+          "file": "images/emery/logo_spirits.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_SPIRITS",
+          "file": "images/gabbro/logo_spirits.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SPIRITS",
+          "file": "images/rect/half_spirits.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SPIRITS",
+          "file": "images/bw/half_spirits.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SPIRITS",
+          "file": "images/chalk/half_spirits.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SPIRITS",
+          "file": "images/emery/half_spirits.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_SPIRITS",
+          "file": "images/gabbro/half_spirits.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STARS",
+          "file": "images/rect/logo_stars.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STARS",
+          "file": "images/bw/logo_stars.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STARS",
+          "file": "images/chalk/logo_stars.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STARS",
+          "file": "images/emery/logo_stars.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STARS",
+          "file": "images/gabbro/logo_stars.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STARS",
+          "file": "images/rect/half_stars.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STARS",
+          "file": "images/bw/half_stars.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STARS",
+          "file": "images/chalk/half_stars.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STARS",
+          "file": "images/emery/half_stars.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STARS",
+          "file": "images/gabbro/half_stars.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STRYKERS",
+          "file": "images/rect/logo_strykers.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STRYKERS",
+          "file": "images/bw/logo_strykers.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STRYKERS",
+          "file": "images/chalk/logo_strykers.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STRYKERS",
+          "file": "images/emery/logo_strykers.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_STRYKERS",
+          "file": "images/gabbro/logo_strykers.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STRYKERS",
+          "file": "images/rect/half_strykers.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STRYKERS",
+          "file": "images/bw/half_strykers.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STRYKERS",
+          "file": "images/chalk/half_strykers.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STRYKERS",
+          "file": "images/emery/half_strykers.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_STRYKERS",
+          "file": "images/gabbro/half_strykers.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_UCFC",
+          "file": "images/rect/logo_ucfc.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_UCFC",
+          "file": "images/bw/logo_ucfc.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_UCFC",
+          "file": "images/chalk/logo_ucfc.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_UCFC",
+          "file": "images/emery/logo_ucfc.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_UCFC",
+          "file": "images/gabbro/logo_ucfc.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_UCFC",
+          "file": "images/rect/half_ucfc.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_UCFC",
+          "file": "images/bw/half_ucfc.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_UCFC",
+          "file": "images/chalk/half_ucfc.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_UCFC",
+          "file": "images/emery/half_ucfc.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_UCFC",
+          "file": "images/gabbro/half_ucfc.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_WAVE",
+          "file": "images/rect/logo_wave.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_WAVE",
+          "file": "images/bw/logo_wave.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_WAVE",
+          "file": "images/chalk/logo_wave.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_WAVE",
+          "file": "images/emery/logo_wave.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "LOGO_WAVE",
+          "file": "images/gabbro/logo_wave.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_WAVE",
+          "file": "images/rect/half_wave.png",
+          "targetPlatforms": [
+            "basalt"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_WAVE",
+          "file": "images/bw/half_wave.png",
+          "targetPlatforms": [
+            "diorite",
+            "flint"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_WAVE",
+          "file": "images/chalk/half_wave.png",
+          "targetPlatforms": [
+            "chalk"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_WAVE",
+          "file": "images/emery/half_wave.png",
+          "targetPlatforms": [
+            "emery"
+          ]
+        },
+        {
+          "type": "bitmap",
+          "name": "HALF_WAVE",
+          "file": "images/gabbro/half_wave.png",
+          "targetPlatforms": [
+            "gabbro"
+          ]
+        }
+      ]
+    },
+    "capabilities": [
+      "configurable"
+    ]
+  }
+}
