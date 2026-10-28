@@ -54,7 +54,8 @@
       "Weather",
       "TempUnits",
       "Temp",
-      "WeatherIcon"
+      "WeatherIcon",
+      "DateAlign"
     ],
     "resources": {
       "media": [

@@ -15,7 +15,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 5
+#define PERSIST_VERSION 6
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -28,7 +28,10 @@ enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
 // "3d 04:12:30".
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 enum { BG_TEAM, BG_CUSTOM };
-enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON };
+enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
+// Where the date goes beside the weather on rectangular screens: with equal
+// space on each side (between the weather and the battery), or centered.
+enum { DATE_BALANCED, DATE_CENTER };
 // Weather icons. Keep in sync with WX_* in src/pkjs/index.js.
 enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG,
        WX_RAIN, WX_SNOW, WX_STORM };
@@ -76,6 +79,7 @@ typedef struct {
   uint8_t wx_icon;     // WX_*
   int16_t temp;        // in the units chosen in settings
   int32_t weather_time;  // when the weather arrived, 0 if never
+  uint8_t date_align;  // DATE_*
 } Game;
 
 typedef struct {
@@ -457,13 +461,18 @@ static void draw_battery(GContext *ctx, GRect r, GColor fg) {
 // Weather. The icons are drawn rather than stored as images so they work in
 // any color on every screen. Each fits in a square box `s` pixels wide.
 
-static bool weather_shown(void) {
-  return s_game.weather != WEATHER_OFF && s_game.weather_time &&
-         time(NULL) - s_game.weather_time < WEATHER_STALE;
+static bool icon_shown(void) {
+  return (s_game.weather == WEATHER_ICON || s_game.weather == WEATHER_ICON_ONLY) &&
+         s_game.wx_icon != WX_NONE;
 }
 
-static bool icon_shown(void) {
-  return s_game.weather == WEATHER_ICON && s_game.wx_icon != WX_NONE;
+static bool temp_shown(void) {
+  return s_game.weather == WEATHER_TEMP || s_game.weather == WEATHER_ICON;
+}
+
+static bool weather_shown(void) {
+  return (temp_shown() || icon_shown()) && s_game.weather_time &&
+         time(NULL) - s_game.weather_time < WEATHER_STALE;
 }
 
 // A sun: a disc of radius r with eight rays reaching out to `reach`.
@@ -577,10 +586,12 @@ static int16_t text_width(const char *text, GFont font) {
                                                GTextOverflowModeFill, GTextAlignmentLeft).w;
 }
 
-// Width of the weather: the icon (when on) and the temperature.
+// Width of the weather: the icon and the temperature, whichever are on.
 static int16_t weather_width(const char *temp) {
   const Layout *l = &s_layout;
-  return (icon_shown() ? l->wx_size + ICON_GAP : 0) + text_width(temp, l->temp_font);
+  int16_t w = icon_shown() ? l->wx_size : 0;
+  if (temp_shown()) w += (w ? ICON_GAP : 0) + text_width(temp, l->temp_font);
+  return w;
 }
 
 // The weather with its left edge at x. bg is the background behind it, for
@@ -591,6 +602,7 @@ static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, 
     draw_weather_icon(ctx, x, l->wx_y, l->wx_size, fg, bg);
     x += l->wx_size + ICON_GAP;
   }
+  if (!temp_shown()) return;
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, temp, l->temp_font,
                      GRect(x, l->temp_y, text_width(temp, l->temp_font) + 4, l->date.size.h),
@@ -626,7 +638,10 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
 
   // Date and weather. Round screens drop the month to fit the weather in the
-  // date line; elsewhere the date moves right if it would run into it.
+  // date line. Elsewhere the date is balanced between the weather and the
+  // battery, or centered (moved right only if it would run into the weather).
+  // With no battery showing there's nothing to balance against, so it's
+  // centered.
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   bool weather = weather_shown();
@@ -644,10 +659,12 @@ static void canvas_update(Layer *layer, GContext *ctx) {
       date_box = GRect(x + ww + WEATHER_GAP - 2, l->date.origin.y, dw + 4, l->date.size.h);
     } else {
       x = l->wx_x;
-      int16_t left = x + ww + WEATHER_GAP;
-      int16_t right = battery_shown(battery_state_service_peek()) ? l->battery.origin.x
-                                                                   : b.size.w;
-      if ((b.size.w - dw) / 2 < left) {
+      bool battery = battery_shown(battery_state_service_peek());
+      int16_t right = battery ? l->battery.origin.x : b.size.w;
+      if (battery && s_game.date_align == DATE_BALANCED) {
+        date_box = GRect(x + ww, l->date.origin.y, right - x - ww, l->date.size.h);
+      } else if ((b.size.w - dw) / 2 < x + ww + WEATHER_GAP) {
+        int16_t left = x + ww + WEATHER_GAP;
         date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
       }
     }
@@ -745,6 +762,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_CustomBg, &n)) s_game.bg_color = n;
   if (read_int(it, MESSAGE_KEY_Weather, &n)) s_game.weather = n;
   if (read_int(it, MESSAGE_KEY_WeatherIcon, &n)) s_game.wx_icon = n;
+  if (read_int(it, MESSAGE_KEY_DateAlign, &n)) s_game.date_align = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);

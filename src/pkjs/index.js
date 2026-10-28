@@ -47,7 +47,8 @@ var DEFAULTS = {
   team: '', view: 'logo', homeOnly: false, mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
   battery: 'always', seconds: false, countdownDetail: 'hours',
-  bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f'
+  bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
+  dateAlign: 'balanced'
 };
 
 function loadSettings() {
@@ -244,7 +245,8 @@ function displayMessage(s) {
              Math.max(0, ['hours', 'minutes', 'seconds'].indexOf(s.countdownDetail)),
            BgColor: s.bgColor === 'custom' ? 1 : 0,
            CustomBg: s.customBg,
-           Weather: Math.max(0, ['off', 'temp', 'icon'].indexOf(s.weather)) };
+           Weather: Math.max(0, ['off', 'temp', 'icon', 'iconOnly'].indexOf(s.weather)),
+           DateAlign: s.dateAlign === 'center' ? 1 : 0 };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -447,7 +449,8 @@ if (typeof Pebble !== 'undefined') {
       bgColor: v('BgColor', DEFAULTS.bgColor),
       customBg: colorValue(v('CustomBg', DEFAULTS.customBg)),
       weather: v('Weather', DEFAULTS.weather),
-      tempUnits: v('TempUnits', DEFAULTS.tempUnits)
+      tempUnits: v('TempUnits', DEFAULTS.tempUnits),
+      dateAlign: v('DateAlign', DEFAULTS.dateAlign)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));

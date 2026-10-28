@@ -20,11 +20,12 @@ emulator, so spacing on a real watch will differ slightly.
 - Team color themes: background, plus a game bar in the team's primary or
   secondary color, or any custom color. The background can be a custom color
   too; with a light one the time and date turn black
-- Optional weather where your phone is: the temperature, with or without a
-  small icon (sun, moon, partly cloudy day or night, cloudy, fog, rain, snow,
-  storm). Top left on rectangular watches; on round ones it goes before the
-  date, which drops the month to make room. Hidden if it hasn't updated in 2
-  hours
+- Optional weather where your phone is: the temperature, a small icon, or
+  both (sun, moon, partly cloudy day or night, cloudy, fog, rain, snow,
+  storm). Top left on rectangular watches, where the date sits balanced
+  between the weather and the battery (or centered, if you prefer). On round
+  watches it goes before the date, which drops the month to make room. Hidden
+  if it hasn't updated in 2 hours
 - Battery indicator: top right (top center on round watches). On color
   watches it turns yellow at 40% or less, red at 20% or less, and green while
   charging
@@ -52,8 +53,9 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom bar color | Any Pebble color, used when the bar color is Custom | Teal (`00AAAA`) |
 | Background color (color watches) | Team color / Custom (selected team only, in split view too) | Team color |
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
-| Show weather | Off / Temperature / Temperature and icon | Off |
+| Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
+| Date position | Balanced between weather and battery / Centered on the screen (rectangular watches, weather on) | Balanced |
 | Show seconds | On / off | Off |
 | Show battery | Always / When low (40% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |

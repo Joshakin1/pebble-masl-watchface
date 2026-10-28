@@ -152,6 +152,7 @@ module.exports = [
         options: [
           { label: 'Off', value: 'off' },
           { label: 'Temperature', value: 'temp' },
+          { label: 'Icon', value: 'iconOnly' },
           { label: 'Temperature and icon', value: 'icon' }
         ]
       },
@@ -163,6 +164,19 @@ module.exports = [
         options: [
           { label: 'Fahrenheit', value: 'f' },
           { label: 'Celsius', value: 'c' }
+        ]
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'DateAlign',
+        label: 'Date position',
+        description: 'With weather on, on rectangular watches. Balanced leaves the ' +
+                     'same space on both sides of the date, so it may sit a little ' +
+                     'right of center. Without the battery showing, the date is centered.',
+        defaultValue: 'balanced',
+        options: [
+          { label: 'Balanced between weather and battery', value: 'balanced' },
+          { label: 'Centered on the screen', value: 'center' }
         ]
       }
     ]
