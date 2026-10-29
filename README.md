@@ -22,8 +22,9 @@ emulator, so spacing on a real watch will differ slightly.
   too; with a light one the time and date turn black
 - Optional weather where your phone is: the temperature, a small icon, or
   both (sun, moon, partly cloudy day or night, cloudy, fog, rain, snow,
-  storm). Top left on rectangular watches, where the date sits balanced
-  between the weather and the battery (or centered, if you prefer). On round
+  storm). Top left on rectangular watches. There the date is balanced, with
+  equal space to the weather and the battery (or the screen edge where one
+  is off), or centered if you prefer. On round
   watches it goes before the date, which drops the month to make room. Hidden
   if it hasn't updated in 2 hours
 - Battery indicator: top right (top center on round watches). On color
@@ -55,7 +56,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
 | Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
-| Date position | Balanced between weather and battery / Centered on the screen (rectangular watches, weather on) | Balanced |
+| Date position | Balanced between weather and battery (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Show seconds | On / off | Off |
 | Show battery | Always / When low (40% or less) or charging / Never | Always |
 | Home games only | On / off (only with a team picked) | Off |

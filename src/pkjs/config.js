@@ -170,9 +170,10 @@ module.exports = [
         type: 'radiogroup',
         messageKey: 'DateAlign',
         label: 'Date position',
-        description: 'With weather on, on rectangular watches. Balanced leaves the ' +
-                     'same space on both sides of the date, so it may sit a little ' +
-                     'right of center. Without the battery showing, the date is centered.',
+        description: 'Rectangular watches only. Balanced leaves the same space on ' +
+                     'both sides of the date, up to the weather and the battery, or ' +
+                     'the screen edge where one is off. So it may sit a little off ' +
+                     'center. With neither showing, the date is centered.',
         defaultValue: 'balanced',
         options: [
           { label: 'Balanced between weather and battery', value: 'balanced' },

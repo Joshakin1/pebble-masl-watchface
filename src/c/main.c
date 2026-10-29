@@ -638,10 +638,11 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
 
   // Date and weather. Round screens drop the month to fit the weather in the
-  // date line. Elsewhere the date is balanced between the weather and the
-  // battery, or centered (moved right only if it would run into the weather).
-  // With no battery showing there's nothing to balance against, so it's
-  // centered.
+  // date line. Elsewhere the date is either balanced, with equal space to
+  // whatever is on each side of it (the weather on the left, the battery on
+  // the right, or the screen edge, less the same margin, where one is
+  // missing), or centered and moved right only if it would run into the
+  // weather.
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
   bool weather = weather_shown();
@@ -649,27 +650,31 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   strftime(date, sizeof(date), weather && l->round ? "%a" : "%a %b", t);
   upcase(date);
   snprintf(date + strlen(date), sizeof(date) - strlen(date), " %d", t->tm_mday);
-  GRect date_box = l->date;
+  int16_t dw = text_width(date, l->date_font), ww = 0;
+  int16_t wx = l->wx_x;  // where the weather starts
   if (weather) {
     snprintf(temp, sizeof(temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
-    int16_t ww = weather_width(temp), dw = text_width(date, l->date_font);
-    int16_t x;
-    if (l->round) {
-      x = cx - (ww + WEATHER_GAP + dw) / 2;
-      date_box = GRect(x + ww + WEATHER_GAP - 2, l->date.origin.y, dw + 4, l->date.size.h);
-    } else {
-      x = l->wx_x;
-      bool battery = battery_shown(battery_state_service_peek());
-      int16_t right = battery ? l->battery.origin.x : b.size.w;
-      if (battery && s_game.date_align == DATE_BALANCED) {
-        date_box = GRect(x + ww, l->date.origin.y, right - x - ww, l->date.size.h);
-      } else if ((b.size.w - dw) / 2 < x + ww + WEATHER_GAP) {
-        int16_t left = x + ww + WEATHER_GAP;
-        date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
-      }
-    }
-    draw_weather(ctx, x, temp, fg, x < cx ? left_bg : right_bg);
+    ww = weather_width(temp);
+    if (l->round) wx = cx - (ww + WEATHER_GAP + dw) / 2;
   }
+  GRect date_box = l->date;
+  if (l->round) {
+    if (weather) {
+      date_box = GRect(wx + ww + WEATHER_GAP - 2, l->date.origin.y, dw + 4, l->date.size.h);
+    }
+  } else {
+    bool battery = battery_shown(battery_state_service_peek());
+    int16_t margin = b.size.w - l->battery.origin.x - l->battery.size.w;
+    int16_t left = weather ? wx + ww : l->wx_x;
+    int16_t right = battery ? l->battery.origin.x : b.size.w - margin;
+    if (s_game.date_align == DATE_BALANCED && (weather || battery)) {
+      date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
+    } else if (weather && (b.size.w - dw) / 2 < left + WEATHER_GAP) {
+      left += WEATHER_GAP;
+      date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
+    }
+  }
+  if (weather) draw_weather(ctx, wx, temp, fg, wx < cx ? left_bg : right_bg);
   draw_text(ctx, date, l->date_font, date_box, fg);
 
   // Time
