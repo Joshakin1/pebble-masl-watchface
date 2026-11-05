@@ -151,6 +151,12 @@ pebble install --emulator basalt
 Use `@rebble/clay`, not the original `pebble-clay`, which breaks the `flint`
 build.
 
+CloudPebble's emulator can't get a location (its phone simulator fails with
+`name 'Position' is not defined`), so weather never arrives there. To test
+the weather icons and spacing anyway, set `TEST_WEATHER` near the top of
+`src/pkjs/index.js`, e.g. `{ temp: 72, icon: 'rain' }`, and set it back to
+`null` before installing on a real watch.
+
 To regenerate logos after changing sizes or adding a team (requires Pillow):
 
 ```bash
