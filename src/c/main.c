@@ -9,13 +9,17 @@
 // minutes until the face should ask again (sooner while a game is live).
 // The last message is kept in persistent storage so the face isn't blank on
 // start. Weather, when on, comes in its own message.
+//
+// The top row has three zones, left, middle and right, each holding one item
+// chosen in settings: the date, the weather, the battery, Bluetooth, or the
+// battery and Bluetooth together.
 
 #include <pebble.h>
 
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 6
+#define PERSIST_VERSION 7
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -29,9 +33,24 @@ enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 enum { BG_TEAM, BG_CUSTOM };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
-// Where the date goes beside the weather on rectangular screens: with equal
-// space on each side (between the weather and the battery), or centered.
-enum { DATE_BALANCED, DATE_CENTER };
+// What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
+// side. Keep in sync with ZONE_ITEMS in src/pkjs/index.js.
+enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS };
+enum { ZONE_LEFT, ZONE_MIDDLE, ZONE_RIGHT, NUM_ZONES };
+// Where the middle zone goes on rectangular screens: with equal space to the
+// left and right zones (or the screen edges where they're empty), or
+// centered on the screen and moved only to stay clear of them.
+enum { MIDDLE_BALANCED, MIDDLE_CENTER };
+enum { BT_DISCONNECTED, BT_ALWAYS, BT_NEVER };
+// Date formats, e.g. for Wednesday, November 5, 2026:
+//   WED NOV 5, WED 5, NOV 5, 5 NOV, WED 11/5, WED 5/11, 11/5, 5/11, 2026-11-05
+enum { DF_DAY_MONTH_DATE, DF_DAY_DATE, DF_MONTH_DATE, DF_DATE_MONTH, DF_DAY_MD, DF_DAY_DM,
+       DF_MD, DF_DM, DF_ISO };
+// What a date with both a weekday and a month drops when the row is full.
+enum { DROP_MONTH, DROP_WEEKDAY };
+// How game start times are shown: like the watch's clock, or always 12 or 24
+// hour.
+enum { CLOCK_WATCH, CLOCK_12H, CLOCK_24H };
 // Weather icons. Keep in sync with WX_* in src/pkjs/index.js.
 enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG,
        WX_RAIN, WX_SNOW, WX_STORM };
@@ -46,9 +65,10 @@ enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG
 #define BATTERY_LOW_PERCENT 40
 #define BATTERY_CRITICAL_PERCENT 20
 
-// Space between the weather and the date, and between the icon and the
-// temperature.
-#define WEATHER_GAP 4
+// Space between the top row's zones, between the battery and Bluetooth when
+// they share one, and between the weather icon and the temperature.
+#define ZONE_GAP 4
+#define STATUS_GAP 3
 #define ICON_GAP 2
 // Weather older than this many seconds is hidden: the phone sends it every
 // 30 minutes, so this means it has lost touch.
@@ -79,7 +99,12 @@ typedef struct {
   uint8_t wx_icon;     // WX_*
   int16_t temp;        // in the units chosen in settings
   int32_t weather_time;  // when the weather arrived, 0 if never
-  uint8_t date_align;  // DATE_*
+  uint8_t zones[NUM_ZONES];  // ITEM_* in each top row zone
+  uint8_t middle_align;  // MIDDLE_*
+  uint8_t bluetooth;     // BT_*: when to show Bluetooth
+  uint8_t date_format;   // DF_*
+  uint8_t date_drop;     // DROP_*
+  uint8_t game_clock;    // CLOCK_*: start times in the game bar
 } Game;
 
 typedef struct {
@@ -110,16 +135,20 @@ static const Team s_teams[] = {
 // Where everything goes on this screen. Logo boxes match the image sizes in
 // tools/convert_logos.py.
 //
-// Weather goes in the top left corner on rectangular screens. Round ones
-// have no corner, so there it goes in the date line, before the date.
+// On rectangular screens the top row's zones sit against the left edge, in
+// the middle and against the right edge. Round ones have no corners, so
+// there the zones are packed together, in order, and centered.
 typedef struct {
-  GRect date, logo, time, line1, line2, battery;
+  GRect date, logo, time, line1, line2;
+  GSize battery;
   int16_t bar_y;
   int16_t half_dx;  // distance from the center to each half logo's center
   bool round;
-  int16_t wx_x, wx_y;  // weather icon's top left (wx_x unused on round screens)
-  int16_t wx_size;     // weather icon's width and height
-  int16_t temp_y;      // top of the temperature's text box
+  int16_t edge;     // rectangular: space between the top row and the sides
+  int16_t row_w;    // round: how wide the top row can be without clipping
+  int16_t row_cy;   // middle of the icons in the top row
+  int16_t wx_size;  // weather icon's width and height
+  int16_t temp_y;   // top of the temperature's text box
   GFont date_font, time_font, line1_font, line2_font, temp_font;
 } Layout;
 
@@ -200,26 +229,26 @@ static void set_layout(GRect b) {
     *l = (Layout){ .date = GRect(0, 20, w, 30), .logo = GRect(0, 50, w, 110),
                    .time = GRect(0, 152, w, 52), .bar_y = 206,
                    .line1 = GRect(40, 203, w - 80, 22), .line2 = GRect(40, 220, w - 80, 30),
-                   .half_dx = 56, .battery = GRect(w / 2 - 10, 6, 20, 10),
-                   .round = true, .wx_y = 28, .wx_size = 16, .temp_y = 20 };
+                   .half_dx = 56, .battery = GSize(20, 10),
+                   .round = true, .row_w = 168, .row_cy = 36, .wx_size = 16, .temp_y = 20 };
   } else if (w >= 200) {  // emery, 200x228
     *l = (Layout){ .date = GRect(0, -4, w, 30), .logo = GRect(0, 26, w, 106),
                    .time = GRect(0, 124, w, 52), .bar_y = 182,
                    .line1 = GRect(4, 179, w - 8, 22), .line2 = GRect(4, 196, w - 8, 30),
-                   .half_dx = 50, .battery = GRect(w - 26, 7, 20, 10),
-                   .wx_x = 6, .wx_y = 4, .wx_size = 16, .temp_y = 0 };
+                   .half_dx = 50, .battery = GSize(20, 10),
+                   .edge = 6, .row_cy = 12, .wx_size = 16, .temp_y = 0 };
   } else if (w >= 180) {  // chalk, 180x180 round
     *l = (Layout){ .date = GRect(0, 10, w, 22), .logo = GRect(0, 31, w, 68),
                    .time = GRect(0, 88, w, 50), .bar_y = 140,
                    .line1 = GRect(25, 137, w - 50, 16), .line2 = GRect(25, 150, w - 50, 22),
-                   .half_dx = 38, .battery = GRect(w / 2 - 8, 2, 16, 8),
-                   .round = true, .wx_y = 16, .wx_size = 12, .temp_y = 10 };
+                   .half_dx = 38, .battery = GSize(16, 8),
+                   .round = true, .row_w = 110, .row_cy = 22, .wx_size = 12, .temp_y = 10 };
   } else {                // basalt, diorite, flint, 144x168
     *l = (Layout){ .date = GRect(0, -3, w, 22), .logo = GRect(0, 20, w, 74),
                    .time = GRect(0, 84, w, 50), .bar_y = 136,
                    .line1 = GRect(2, 133, w - 4, 16), .line2 = GRect(2, 146, w - 4, 22),
-                   .half_dx = 36, .battery = GRect(w - 19, 4, 16, 8),
-                   .wx_x = 3, .wx_y = 2, .wx_size = 12, .temp_y = -2 };
+                   .half_dx = 36, .battery = GSize(16, 8),
+                   .edge = 3, .row_cy = 8, .wx_size = 12, .temp_y = -2 };
   }
   bool large = w >= 200;
   l->date_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
@@ -350,6 +379,36 @@ static void format_countdown(char *buf, size_t size, int32_t start, uint8_t deta
   }
 }
 
+// The start time, in 12 or 24 hour per settings. The phone always sends 12
+// hour ("7:05pm EST"); in 24 hour that becomes "19:05 EST". Anything that
+// doesn't look like a time is left alone.
+static void format_start(char *buf, size_t size, const char *time) {
+  bool h24 = s_game.game_clock == CLOCK_24H ||
+             (s_game.game_clock == CLOCK_WATCH && clock_is_24h_style());
+  const char *p = time;
+  int h = 0, digits = 0;
+  while (*p >= '0' && *p <= '9' && digits < 2) {
+    h = h * 10 + (*p++ - '0');
+    digits++;
+  }
+  bool ok = h24 && digits && p[0] == ':' && p[1] >= '0' && p[1] <= '9' &&
+            p[2] >= '0' && p[2] <= '9';
+  if (!ok) {
+    snprintf(buf, size, "%s", time);
+    return;
+  }
+  int m = (p[1] - '0') * 10 + (p[2] - '0');
+  p += 3;
+  while (*p == ' ') p++;
+  char ap = *p | 0x20;  // lowercase
+  if ((ap != 'a' && ap != 'p') || (p[1] | 0x20) != 'm') {
+    snprintf(buf, size, "%s", time);
+    return;
+  }
+  h = h % 12 + (ap == 'p' ? 12 : 0);
+  snprintf(buf, size, "%02d:%02d%s", h, m, p + 2);
+}
+
 // The two lines in the game bar.
 //   Scheduled:  "@ Wave - Sat 11/28" / "7:05pm EST" or "in 3d 4h"
 //   Live:       "LIVE - 2nd 4:12"    / "STL 3 - 2 MKE", or "@ Wave" with no spoilers
@@ -379,7 +438,7 @@ static void format_lines(char *l1, size_t n1, char *l2, size_t n2) {
       if (g->mode == MODE_COUNTDOWN && g->start) {
         format_countdown(l2, n2, g->start, g->countdown);
       } else {
-        snprintf(l2, n2, "%s", g->time);
+        format_start(l2, n2, g->time);
       }
       break;
     }
@@ -458,10 +517,30 @@ static bool battery_shown(BatteryChargeState b) {
          (s_game.battery == BATTERY_LOW && (low || b.is_charging));
 }
 
+static bool bluetooth_shown(void) {
+  return s_game.bluetooth == BT_ALWAYS ||
+         (s_game.bluetooth == BT_DISCONNECTED && !connection_service_peek_pebble_app_connection());
+}
+
+// The Bluetooth rune, about half as wide as it is tall, with a slash through
+// it while the phone isn't connected.
+static void draw_bluetooth(GContext *ctx, GRect r, GColor fg) {
+  int16_t x0 = r.origin.x, x1 = r.origin.x + r.size.w - 1, xm = (x0 + x1) / 2;
+  int16_t y0 = r.origin.y, y1 = r.origin.y + r.size.h - 1, q = r.size.h / 4;
+  graphics_context_set_stroke_color(ctx, fg);
+  graphics_draw_line(ctx, GPoint(xm, y0), GPoint(xm, y1));
+  graphics_draw_line(ctx, GPoint(xm, y0), GPoint(x1, y0 + q));
+  graphics_draw_line(ctx, GPoint(x1, y0 + q), GPoint(x0, y1 - q));
+  graphics_draw_line(ctx, GPoint(x0, y0 + q), GPoint(x1, y1 - q));
+  graphics_draw_line(ctx, GPoint(x1, y1 - q), GPoint(xm, y1));
+  if (!connection_service_peek_pebble_app_connection()) {
+    graphics_draw_line(ctx, GPoint(x0 - 1, y0), GPoint(x1 + 1, y1));
+  }
+}
+
 // A battery outline with a nub on the right, filled to the charge level.
 static void draw_battery(GContext *ctx, GRect r, GColor fg) {
   BatteryChargeState b = battery_state_service_peek();
-  if (!battery_shown(b)) return;
   GRect body = GRect(r.origin.x, r.origin.y, r.size.w - 2, r.size.h);
   graphics_context_set_stroke_color(ctx, fg);
   graphics_draw_rect(ctx, body);
@@ -616,7 +695,7 @@ static int16_t weather_width(const char *temp) {
 static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, GColor bg) {
   const Layout *l = &s_layout;
   if (icon_shown()) {
-    draw_weather_icon(ctx, x, l->wx_y, l->wx_size, fg, bg);
+    draw_weather_icon(ctx, x, l->row_cy - l->wx_size / 2, l->wx_size, fg, bg);
     x += l->wx_size + ICON_GAP;
   }
   if (!temp_shown()) return;
@@ -624,6 +703,182 @@ static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, 
   graphics_draw_text(ctx, temp, l->temp_font,
                      GRect(x, l->temp_y, text_width(temp, l->temp_font) + 4, l->date.size.h),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
+// ---------------------------------------------------------------------------
+// Top row
+
+// What the top row shows this time round. Items that are off or hidden take
+// no space.
+typedef struct {
+  char date[16], temp[8];
+  bool battery, bluetooth, weather;
+} Row;
+
+// The date in the chosen format. `shorter` drops the weekday or the month
+// (per settings) from formats that have both, and the year from ISO.
+static void format_date(char *buf, size_t size, const struct tm *t, bool shorter) {
+  char wd[8], mon[8];
+  strftime(wd, sizeof(wd), "%a", t);
+  strftime(mon, sizeof(mon), "%b", t);
+  int d = t->tm_mday, m = t->tm_mon + 1;
+  bool no_wd = shorter && s_game.date_drop == DROP_WEEKDAY;
+  bool no_mon = shorter && !no_wd;
+  switch (s_game.date_format) {
+    case DF_DAY_DATE:   snprintf(buf, size, "%s %d", wd, d); break;
+    case DF_MONTH_DATE: snprintf(buf, size, "%s %d", mon, d); break;
+    case DF_DATE_MONTH: snprintf(buf, size, "%d %s", d, mon); break;
+    case DF_MD:         snprintf(buf, size, "%d/%d", m, d); break;
+    case DF_DM:         snprintf(buf, size, "%d/%d", d, m); break;
+    case DF_DAY_MD:
+    case DF_DAY_DM: {
+      bool md = s_game.date_format == DF_DAY_MD;
+      if (no_wd) {
+        snprintf(buf, size, "%d/%d", md ? m : d, md ? d : m);
+      } else if (no_mon) {
+        snprintf(buf, size, "%s %d", wd, d);
+      } else {
+        snprintf(buf, size, "%s %d/%d", wd, md ? m : d, md ? d : m);
+      }
+      break;
+    }
+    case DF_ISO:
+      if (shorter) {
+        snprintf(buf, size, "%02d-%02d", m, d);
+      } else {
+        snprintf(buf, size, "%d-%02d-%02d", t->tm_year + 1900, m, d);
+      }
+      break;
+    default:  // DF_DAY_MONTH_DATE
+      if (no_wd) {
+        snprintf(buf, size, "%s %d", mon, d);
+      } else if (no_mon) {
+        snprintf(buf, size, "%s %d", wd, d);
+      } else {
+        snprintf(buf, size, "%s %s %d", wd, mon, d);
+      }
+      break;
+  }
+  upcase(buf);
+}
+
+static int16_t bluetooth_h(void) { return s_layout.battery.h + 2; }
+static int16_t bluetooth_w(void) { return bluetooth_h() / 2 + 1; }
+
+static int16_t item_width(const Row *r, uint8_t item) {
+  const Layout *l = &s_layout;
+  switch (item) {
+    case ITEM_DATE: return text_width(r->date, l->date_font);
+    case ITEM_WEATHER: return r->weather ? weather_width(r->temp) : 0;
+    case ITEM_BATTERY: return r->battery ? l->battery.w : 0;
+    case ITEM_BLUETOOTH: return r->bluetooth ? bluetooth_w() : 0;
+    case ITEM_STATUS: {
+      int16_t bat = item_width(r, ITEM_BATTERY), bt = item_width(r, ITEM_BLUETOOTH);
+      return bat && bt ? bat + STATUS_GAP + bt : bat + bt;
+    }
+  }
+  return 0;
+}
+
+// Draw an item with its left edge at x. bg is the background behind it.
+static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, GColor fg,
+                      GColor bg) {
+  const Layout *l = &s_layout;
+  switch (item) {
+    case ITEM_DATE:
+      graphics_context_set_text_color(ctx, fg);
+      graphics_draw_text(ctx, r->date, l->date_font,
+                         GRect(x, l->date.origin.y, item_width(r, item) + 4, l->date.size.h),
+                         GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+      break;
+    case ITEM_WEATHER:
+      if (r->weather) draw_weather(ctx, x, r->temp, fg, bg);
+      break;
+    case ITEM_BATTERY:
+      if (r->battery) {
+        draw_battery(ctx, GRect(x, l->row_cy - l->battery.h / 2, l->battery.w, l->battery.h), fg);
+      }
+      break;
+    case ITEM_BLUETOOTH:
+      if (r->bluetooth) {
+        draw_bluetooth(ctx, GRect(x, l->row_cy - bluetooth_h() / 2, bluetooth_w(), bluetooth_h()),
+                       fg);
+      }
+      break;
+    case ITEM_STATUS:
+      draw_item(ctx, r, ITEM_BATTERY, x, fg, bg);
+      if (r->battery) x += l->battery.w + STATUS_GAP;
+      draw_item(ctx, r, ITEM_BLUETOOTH, x, fg, bg);
+      break;
+  }
+}
+
+// Work out each zone's width (0 when empty) and left edge on a screen w
+// wide. Returns false when they don't all fit.
+static bool place_row(const Row *r, int16_t w, int16_t xs[], int16_t ws[]) {
+  const Layout *l = &s_layout;
+  int16_t total = 0;
+  int shown = 0;
+  for (int i = 0; i < NUM_ZONES; i++) {
+    ws[i] = item_width(r, s_game.zones[i]);
+    if (ws[i]) {
+      total += ws[i];
+      shown++;
+    }
+  }
+  if (shown > 1) total += (shown - 1) * ZONE_GAP;
+
+  if (l->round) {
+    int16_t x = (w - total) / 2;
+    for (int i = 0; i < NUM_ZONES; i++) {
+      xs[i] = x;
+      if (ws[i]) x += ws[i] + ZONE_GAP;
+    }
+    return total <= l->row_w;
+  }
+
+  xs[ZONE_LEFT] = l->edge;
+  xs[ZONE_RIGHT] = w - l->edge - ws[ZONE_RIGHT];
+  // The space the middle zone has, from the left zone to the right one, or
+  // to the screen edge (less the same margin) where one is empty.
+  int16_t left = l->edge + ws[ZONE_LEFT], right = w - l->edge - ws[ZONE_RIGHT];
+  int16_t mw = ws[ZONE_MIDDLE];
+  int16_t x = s_game.middle_align == MIDDLE_BALANCED ? (left + right - mw) / 2 : (w - mw) / 2;
+  int16_t lo = ws[ZONE_LEFT] ? left + ZONE_GAP : left;
+  int16_t hi = (ws[ZONE_RIGHT] ? right - ZONE_GAP : right) - mw;
+  if (x > hi) x = hi;
+  if (x < lo) x = lo;
+  xs[ZONE_MIDDLE] = x;
+  return total <= w - 2 * l->edge;
+}
+
+static bool date_in_row(void) {
+  for (int i = 0; i < NUM_ZONES; i++) {
+    if (s_game.zones[i] == ITEM_DATE) return true;
+  }
+  return false;
+}
+
+// The top row, shortening the date when it doesn't fit. left_bg and right_bg
+// are the background on each half of the screen.
+static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GColor left_bg,
+                     GColor right_bg) {
+  Row row = { .battery = battery_shown(battery_state_service_peek()),
+              .bluetooth = bluetooth_shown(), .weather = weather_shown() };
+  if (row.weather) {
+    snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
+  }
+  format_date(row.date, sizeof(row.date), t, false);
+  int16_t xs[NUM_ZONES], ws[NUM_ZONES];
+  if (!place_row(&row, w, xs, ws) && date_in_row()) {
+    format_date(row.date, sizeof(row.date), t, true);
+    place_row(&row, w, xs, ws);
+  }
+  for (int i = 0; i < NUM_ZONES; i++) {
+    if (!ws[i]) continue;
+    GColor bg = xs[i] + ws[i] / 2 < w / 2 ? left_bg : right_bg;
+    draw_item(ctx, &row, s_game.zones[i], xs[i], fg, bg);
+  }
 }
 
 static void canvas_update(Layer *layer, GContext *ctx) {
@@ -655,51 +910,16 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_context_set_fill_color(ctx, bar);
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
 
-  // Date and weather. Round screens drop the month to fit the weather in the
-  // date line. Elsewhere the date is either balanced, with equal space to
-  // whatever is on each side of it (the weather on the left, the battery on
-  // the right, or the screen edge, less the same margin, where one is
-  // missing), or centered and moved right only if it would run into the
-  // weather.
+  // Top row: date, weather, battery and Bluetooth, wherever settings put them.
   time_t now = time(NULL);
   struct tm *t = localtime(&now);
-  bool weather = weather_shown();
-  char date[16], clock[8], temp[8];
-  strftime(date, sizeof(date), weather && l->round ? "%a" : "%a %b", t);
-  upcase(date);
-  snprintf(date + strlen(date), sizeof(date) - strlen(date), " %d", t->tm_mday);
-  int16_t dw = text_width(date, l->date_font), ww = 0;
-  int16_t wx = l->wx_x;  // where the weather starts
-  if (weather) {
-    snprintf(temp, sizeof(temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
-    ww = weather_width(temp);
-    if (l->round) wx = cx - (ww + WEATHER_GAP + dw) / 2;
-  }
-  GRect date_box = l->date;
-  if (l->round) {
-    if (weather) {
-      date_box = GRect(wx + ww + WEATHER_GAP - 2, l->date.origin.y, dw + 4, l->date.size.h);
-    }
-  } else {
-    bool battery = battery_shown(battery_state_service_peek());
-    int16_t margin = b.size.w - l->battery.origin.x - l->battery.size.w;
-    int16_t left = weather ? wx + ww : l->wx_x;
-    int16_t right = battery ? l->battery.origin.x : b.size.w - margin;
-    if (s_game.date_align == DATE_BALANCED && (weather || battery)) {
-      date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
-    } else if (weather && (b.size.w - dw) / 2 < left + WEATHER_GAP) {
-      left += WEATHER_GAP;
-      date_box = GRect(left, l->date.origin.y, right - left, l->date.size.h);
-    }
-  }
-  if (weather) draw_weather(ctx, wx, temp, fg, wx < cx ? left_bg : right_bg);
-  draw_text(ctx, date, l->date_font, date_box, fg);
+  draw_row(ctx, t, b.size.w, fg, left_bg, right_bg);
 
   // Time
+  char clock[8];
   strftime(clock, sizeof(clock), clock_is_24h_style() ? "%H:%M" : "%I:%M", t);
   const char *clock_text = clock[0] == '0' && !clock_is_24h_style() ? clock + 1 : clock;
   draw_clock(ctx, clock_text, t->tm_sec, fg);
-  draw_battery(ctx, l->battery, fg);
 
   // Logos
   if (!logo_shown) {
@@ -759,7 +979,9 @@ static void save_game(void) {
 }
 
 static void load_game(void) {
-  s_game = (Game){ .away_score = -1, .home_score = -1 };
+  // Same as the settings page's defaults, until the phone says otherwise.
+  s_game = (Game){ .away_score = -1, .home_score = -1,
+                   .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS } };
   if (persist_read_int(PERSIST_KEY_VERSION) == PERSIST_VERSION) {
     persist_read_data(PERSIST_KEY_GAME, &s_game, sizeof(s_game));
   }
@@ -787,7 +1009,14 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_CustomBg, &n)) s_game.bg_color = n;
   if (read_int(it, MESSAGE_KEY_Weather, &n)) s_game.weather = n;
   if (read_int(it, MESSAGE_KEY_WeatherIcon, &n)) s_game.wx_icon = n;
-  if (read_int(it, MESSAGE_KEY_DateAlign, &n)) s_game.date_align = n;
+  if (read_int(it, MESSAGE_KEY_ZoneLeft, &n)) s_game.zones[ZONE_LEFT] = n;
+  if (read_int(it, MESSAGE_KEY_ZoneMiddle, &n)) s_game.zones[ZONE_MIDDLE] = n;
+  if (read_int(it, MESSAGE_KEY_ZoneRight, &n)) s_game.zones[ZONE_RIGHT] = n;
+  if (read_int(it, MESSAGE_KEY_MiddleAlign, &n)) s_game.middle_align = n;
+  if (read_int(it, MESSAGE_KEY_Bluetooth, &n)) s_game.bluetooth = n;
+  if (read_int(it, MESSAGE_KEY_DateFormat, &n)) s_game.date_format = n;
+  if (read_int(it, MESSAGE_KEY_DateDrop, &n)) s_game.date_drop = n;
+  if (read_int(it, MESSAGE_KEY_GameClock, &n)) s_game.game_clock = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);
@@ -849,6 +1078,7 @@ static void unobstructed_change(AnimationProgress progress, void *context) {
 
 static void app_connection_handler(bool connected) {
   if (connected) request_refresh();
+  layer_mark_dirty(s_canvas);  // for the Bluetooth icon
 }
 
 static void window_load(Window *window) {

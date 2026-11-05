@@ -2,6 +2,24 @@
 
 var TEAMS = require('./teams');
 
+// One of the top row's three spots.
+function zoneSelect(key, label, value) {
+  return {
+    type: 'select',
+    messageKey: key,
+    label: label,
+    defaultValue: value,
+    options: [
+      { label: 'Empty', value: 'none' },
+      { label: 'Date', value: 'date' },
+      { label: 'Weather', value: 'weather' },
+      { label: 'Battery', value: 'battery' },
+      { label: 'Bluetooth', value: 'bluetooth' },
+      { label: 'Battery and Bluetooth', value: 'status' }
+    ]
+  };
+}
+
 module.exports = [
   { type: 'heading', defaultValue: 'MASL Watchface' },
   {
@@ -74,6 +92,17 @@ module.exports = [
           { label: 'My time zone', value: 'local' },
           { label: "Home team's time zone", value: 'home' }
         ]
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'GameClock',
+        label: 'Start time clock',
+        defaultValue: 'watch',
+        options: [
+          { label: "Same as the watch's clock", value: 'watch' },
+          { label: '12 hour (7:05pm)', value: '12' },
+          { label: '24 hour (19:05)', value: '24' }
+        ]
       }
     ]
   },
@@ -128,6 +157,57 @@ module.exports = [
   {
     type: 'section',
     items: [
+      { type: 'heading', defaultValue: 'Top row' },
+      zoneSelect('ZoneLeft', 'Left', 'weather'),
+      zoneSelect('ZoneMiddle', 'Middle', 'date'),
+      zoneSelect('ZoneRight', 'Right', 'status'),
+      {
+        type: 'radiogroup',
+        messageKey: 'MiddleAlign',
+        label: 'Middle position',
+        description: 'Rectangular watches only. Balanced leaves the same space on ' +
+                     'each side, up to the left and right items (or the screen edge ' +
+                     'where one is empty), so it may sit a little off center. ' +
+                     'Round watches center the whole row, in this order.',
+        defaultValue: 'balanced',
+        options: [
+          { label: 'Balanced between left and right', value: 'balanced' },
+          { label: 'Centered on the screen', value: 'center' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'DateFormat',
+        label: 'Date format',
+        defaultValue: 'dayMonthDate',
+        options: [
+          { label: 'WED NOV 5', value: 'dayMonthDate' },
+          { label: 'WED 5', value: 'dayDate' },
+          { label: 'NOV 5', value: 'monthDate' },
+          { label: '5 NOV', value: 'dateMonth' },
+          { label: 'WED 11/5', value: 'dayMD' },
+          { label: 'WED 5/11', value: 'dayDM' },
+          { label: '11/5', value: 'md' },
+          { label: '5/11', value: 'dm' },
+          { label: '2026-11-05', value: 'iso' }
+        ]
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'DateDrop',
+        label: 'When the row is full, drop the',
+        description: 'Only when everything in the top row would not fit.',
+        defaultValue: 'month',
+        options: [
+          { label: 'Month (WED 5)', value: 'month' },
+          { label: 'Weekday (NOV 5 or 11/5)', value: 'weekday' }
+        ]
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
       { type: 'heading', defaultValue: 'Clock' },
       {
         type: 'toggle',
@@ -146,8 +226,8 @@ module.exports = [
         type: 'select',
         messageKey: 'Weather',
         label: 'Show weather',
-        description: "Top left (next to the date on round watches), from your phone's " +
-                     'location via Open-Meteo. Updates every 30 minutes.',
+        description: "From your phone's location via Open-Meteo. Updates every 30 " +
+                     'minutes. Shows in whichever top row spot is set to Weather.',
         defaultValue: 'off',
         options: [
           { label: 'Off', value: 'off' },
@@ -166,26 +246,12 @@ module.exports = [
           { label: 'Celsius', value: 'c' }
         ]
       },
-      {
-        type: 'radiogroup',
-        messageKey: 'DateAlign',
-        label: 'Date position',
-        description: 'Rectangular watches only. Balanced leaves the same space on ' +
-                     'both sides of the date, up to the weather and the battery, or ' +
-                     'the screen edge where one is off. So it may sit a little off ' +
-                     'center. With neither showing, the date is centered.',
-        defaultValue: 'balanced',
-        options: [
-          { label: 'Balanced between weather and battery', value: 'balanced' },
-          { label: 'Centered on the screen', value: 'center' }
-        ]
-      }
     ]
   },
   {
     type: 'section',
     items: [
-      { type: 'heading', defaultValue: 'Battery' },
+      { type: 'heading', defaultValue: 'Battery and Bluetooth' },
       {
         type: 'select',
         messageKey: 'Battery',
@@ -194,6 +260,19 @@ module.exports = [
         options: [
           { label: 'Always', value: 'always' },
           { label: 'When low (40% or less) or charging', value: 'low' },
+          { label: 'Never', value: 'never' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'Bluetooth',
+        label: 'Show Bluetooth',
+        description: 'The icon has a slash through it while the phone is disconnected. ' +
+                     'Scores and weather only update while connected.',
+        defaultValue: 'disconnected',
+        options: [
+          { label: 'Only when disconnected', value: 'disconnected' },
+          { label: 'Always', value: 'always' },
           { label: 'Never', value: 'never' }
         ]
       }

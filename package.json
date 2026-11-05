@@ -55,7 +55,14 @@
       "TempUnits",
       "Temp",
       "WeatherIcon",
-      "DateAlign"
+      "ZoneLeft",
+      "ZoneMiddle",
+      "ZoneRight",
+      "MiddleAlign",
+      "Bluetooth",
+      "DateFormat",
+      "DateDrop",
+      "GameClock"
     ],
     "resources": {
       "media": [

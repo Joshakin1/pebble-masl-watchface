@@ -48,14 +48,24 @@ var DEFAULTS = {
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
   battery: 'always', seconds: false, countdownDetail: 'hours',
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
-  dateAlign: 'balanced'
+  zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
+  bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
+  gameClock: 'watch'
 };
+
+// What a top row zone can hold, in the order of the watch's ITEM_* enum.
+var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status'];
+// Date formats, in the order of the watch's DF_* enum.
+var DATE_FORMATS = ['dayMonthDate', 'dayDate', 'monthDate', 'dateMonth', 'dayMD', 'dayDM',
+                    'md', 'dm', 'iso'];
 
 function loadSettings() {
   var s = {};
   try {
     s = JSON.parse(localStorage.getItem(SETTINGS_KEY)) || {};
   } catch (e) { /* use defaults */ }
+  // Before the top row had zones, the middle's position was the date's.
+  if (!('middleAlign' in s) && 'dateAlign' in s) s.middleAlign = s.dateAlign;
   var out = {};
   for (var k in DEFAULTS) out[k] = k in s ? s[k] : DEFAULTS[k];
   return out;
@@ -215,10 +225,16 @@ function pickGame(games, s, now) {
   return next || null;
 }
 
+// Whether the weather is on and has a spot in the top row.
+function weatherOn(s) {
+  return s.weather !== 'off' &&
+         [s.zoneLeft, s.zoneMiddle, s.zoneRight].indexOf('weather') !== -1;
+}
+
 // Minutes until the watch should ask again.
 function refreshDelay(game, s, now) {
   var delay = gameDelay(game, s, now);
-  return s.weather === 'off' ? delay : Math.min(delay, WEATHER_REFRESH);
+  return weatherOn(s) ? Math.min(delay, WEATHER_REFRESH) : delay;
 }
 
 function gameDelay(game, s, now) {
@@ -246,7 +262,14 @@ function displayMessage(s) {
            BgColor: s.bgColor === 'custom' ? 1 : 0,
            CustomBg: s.customBg,
            Weather: Math.max(0, ['off', 'temp', 'icon', 'iconOnly'].indexOf(s.weather)),
-           DateAlign: s.dateAlign === 'center' ? 1 : 0 };
+           ZoneLeft: Math.max(0, ZONE_ITEMS.indexOf(s.zoneLeft)),
+           ZoneMiddle: Math.max(0, ZONE_ITEMS.indexOf(s.zoneMiddle)),
+           ZoneRight: Math.max(0, ZONE_ITEMS.indexOf(s.zoneRight)),
+           MiddleAlign: s.middleAlign === 'center' ? 1 : 0,
+           Bluetooth: Math.max(0, ['disconnected', 'always', 'never'].indexOf(s.bluetooth)),
+           DateFormat: Math.max(0, DATE_FORMATS.indexOf(s.dateFormat)),
+           DateDrop: s.dateDrop === 'weekday' ? 1 : 0,
+           GameClock: Math.max(0, ['watch', '12', '24'].indexOf(s.gameClock)) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -356,7 +379,7 @@ var weatherAsked = 0;
 // weather is off. `force` skips the wait, for a settings change.
 function fetchWeather(s, force) {
   var now = Date.now();
-  if (s.weather === 'off') return;
+  if (!weatherOn(s)) return;
   if (!force && now - weatherAsked < (WEATHER_REFRESH - 5) * 60000) return;
   weatherAsked = now;
   var failed = function (why) {
@@ -418,7 +441,8 @@ if (typeof Pebble !== 'undefined') {
   var Clay = require('@rebble/clay');
   // Events are handled here so settings that only shape the request stay on
   // the phone.
-  var clay = new Clay(require('./config'), null, { autoHandleEvents: false });
+  var clay = new Clay(require('./config'), require('./config-custom'),
+                       { autoHandleEvents: false });
 
   Pebble.addEventListener('ready', fetchGame);
   Pebble.addEventListener('appmessage', function (e) {
@@ -450,13 +474,23 @@ if (typeof Pebble !== 'undefined') {
       customBg: colorValue(v('CustomBg', DEFAULTS.customBg)),
       weather: v('Weather', DEFAULTS.weather),
       tempUnits: v('TempUnits', DEFAULTS.tempUnits),
-      dateAlign: v('DateAlign', DEFAULTS.dateAlign)
+      zoneLeft: v('ZoneLeft', DEFAULTS.zoneLeft),
+      zoneMiddle: v('ZoneMiddle', DEFAULTS.zoneMiddle),
+      zoneRight: v('ZoneRight', DEFAULTS.zoneRight),
+      middleAlign: v('MiddleAlign', DEFAULTS.middleAlign),
+      bluetooth: v('Bluetooth', DEFAULTS.bluetooth),
+      dateFormat: v('DateFormat', DEFAULTS.dateFormat),
+      dateDrop: v('DateDrop', DEFAULTS.dateDrop),
+      gameClock: v('GameClock', DEFAULTS.gameClock)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     // Switch the theme right away; the game follows once the fetch is back.
     send(displayMessage(s));
-    if (s.weather !== old.weather || s.tempUnits !== old.tempUnits) fetchWeather(s, true);
+    if (weatherOn(s) !== weatherOn(old) || s.weather !== old.weather ||
+        s.tempUnits !== old.tempUnits) {
+      fetchWeather(s, true);
+    }
     fetchGame();
   });
 }
