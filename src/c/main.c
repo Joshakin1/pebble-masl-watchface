@@ -125,7 +125,8 @@ typedef struct {
 
 static Window *s_window;
 static Layer *s_canvas;
-static Layout s_layout;
+static Layout s_base;    // the layout with the whole screen in view
+static Layout s_layout;  // s_base moved for quick view, used for drawing
 static Game s_game;
 static GBitmap *s_logo, *s_away_logo, *s_home_logo;
 static int s_refresh_in = DEFAULT_REFRESH;
@@ -194,7 +195,7 @@ static GColor text_on(GColor bg) {
 
 static void set_layout(GRect b) {
   int w = b.size.w;
-  Layout *l = &s_layout;
+  Layout *l = &s_base;
   if (w >= 260) {         // gabbro, 260x260 round
     *l = (Layout){ .date = GRect(0, 20, w, 30), .logo = GRect(0, 50, w, 110),
                    .time = GRect(0, 152, w, 52), .bar_y = 206,
@@ -229,6 +230,22 @@ static void set_layout(GRect b) {
   l->temp_font = l->round ? l->date_font
                           : fonts_get_system_font(large ? FONT_KEY_GOTHIC_18_BOLD
                                                         : FONT_KEY_GOTHIC_14_BOLD);
+  s_layout = *l;
+}
+
+// Quick view (the timeline peek) covers the bottom of the screen. While it's
+// up, the time and game bar move up by the covered height so both stay in
+// view, and the logo, which no longer fits between the date and the time, is
+// hidden. The same on every watch. Returns whether the logo is shown.
+static bool fit_layout(GRect full, GRect visible) {
+  s_layout = s_base;
+  int16_t covered = full.size.h - (visible.origin.y + visible.size.h);
+  if (covered <= 0) return true;
+  s_layout.time.origin.y -= covered;
+  s_layout.bar_y -= covered;
+  s_layout.line1.origin.y -= covered;
+  s_layout.line2.origin.y -= covered;
+  return false;
 }
 
 // ---------------------------------------------------------------------------
@@ -611,6 +628,7 @@ static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, 
 
 static void canvas_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
+  bool logo_shown = fit_layout(b, layer_get_unobstructed_bounds(layer));
   const Layout *l = &s_layout;
   bool matchup = split_view();
   int16_t cx = b.size.w / 2;
@@ -684,7 +702,9 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   draw_battery(ctx, l->battery, fg);
 
   // Logos
-  if (matchup && (s_game.away[0] || s_game.home[0])) {
+  if (!logo_shown) {
+    // hidden under quick view
+  } else if (matchup && (s_game.away[0] || s_game.home[0])) {
     draw_logo(ctx, s_away_logo, s_game.away, cx - l->half_dx,
               GRect(0, l->logo.origin.y, l->half_dx * 2, l->logo.size.h), fg);
     draw_logo(ctx, s_home_logo, s_game.home, cx + l->half_dx,
@@ -822,6 +842,11 @@ static void battery_handler(BatteryChargeState state) {
   layer_mark_dirty(s_canvas);
 }
 
+// Redraw through quick view's slide in and out so the layout follows it.
+static void unobstructed_change(AnimationProgress progress, void *context) {
+  layer_mark_dirty(s_canvas);
+}
+
 static void app_connection_handler(bool connected) {
   if (connected) request_refresh();
 }
@@ -856,6 +881,9 @@ static void init(void) {
 
   update_tick_unit();
   battery_state_service_subscribe(battery_handler);
+  unobstructed_area_service_subscribe((UnobstructedAreaHandlers){
+    .change = unobstructed_change,
+  }, NULL);
   connection_service_subscribe((ConnectionHandlers){
     .pebble_app_connection_handler = app_connection_handler,
   });
@@ -864,6 +892,7 @@ static void init(void) {
 static void deinit(void) {
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
+  unobstructed_area_service_unsubscribe();
   connection_service_unsubscribe();
   window_destroy(s_window);
   destroy_logo(&s_logo);

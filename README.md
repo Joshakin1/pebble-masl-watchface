@@ -42,6 +42,8 @@ emulator, so spacing on a real watch will differ slightly.
     no-spoilers mode
   - Final (scores on only): `FINAL` over the score, for up to 6 hours after
     the start time, unless the next game is sooner
+- Quick view: while a timeline peek covers the bottom of the screen, the time
+  and game bar slide up above it and the logo is hidden, on every watch
 - Black-and-white watches get dithered logos on a white face
 
 ## Settings
