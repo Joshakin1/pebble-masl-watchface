@@ -808,7 +808,8 @@
     },
     "capabilities": [
       "configurable",
-      "location"
+      "location",
+      "health"
     ]
   }
 }

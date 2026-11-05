@@ -64,7 +64,8 @@ var DEFAULTS = {
 };
 
 // What a top row zone can hold, in the order of the watch's ITEM_* enum.
-var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status'];
+var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status', 'steps',
+                  'heartRate'];
 // Date formats, in the order of the watch's DF_* enum.
 var DATE_FORMATS = ['dayMonthDate', 'dayDate', 'monthDate', 'dateMonth', 'dayMD', 'dayDM',
                     'md', 'dm', 'iso'];

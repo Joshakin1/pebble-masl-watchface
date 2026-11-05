@@ -35,7 +35,8 @@ enum { BG_TEAM, BG_CUSTOM };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
 // What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
 // side. Keep in sync with ZONE_ITEMS in src/pkjs/index.js.
-enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS };
+enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS,
+       ITEM_STEPS, ITEM_HEART_RATE };
 enum { ZONE_LEFT, ZONE_MIDDLE, ZONE_RIGHT, NUM_ZONES };
 // Where the middle zone goes on rectangular screens: with equal space to the
 // left and right zones (or the screen edges where they're empty), or
@@ -522,18 +523,19 @@ static bool bluetooth_shown(void) {
          (s_game.bluetooth == BT_DISCONNECTED && !connection_service_peek_pebble_app_connection());
 }
 
-// The Bluetooth rune, about half as wide as it is tall, with a slash through
-// it while the phone isn't connected.
+// The Bluetooth rune, about half as wide as it is tall. While the phone isn't
+// connected it has a slash through it, and is red on color watches.
 static void draw_bluetooth(GContext *ctx, GRect r, GColor fg) {
   int16_t x0 = r.origin.x, x1 = r.origin.x + r.size.w - 1, xm = (x0 + x1) / 2;
   int16_t y0 = r.origin.y, y1 = r.origin.y + r.size.h - 1, q = r.size.h / 4;
-  graphics_context_set_stroke_color(ctx, fg);
+  bool connected = connection_service_peek_pebble_app_connection();
+  graphics_context_set_stroke_color(ctx, connected ? fg : PBL_IF_COLOR_ELSE(GColorRed, fg));
   graphics_draw_line(ctx, GPoint(xm, y0), GPoint(xm, y1));
   graphics_draw_line(ctx, GPoint(xm, y0), GPoint(x1, y0 + q));
   graphics_draw_line(ctx, GPoint(x1, y0 + q), GPoint(x0, y1 - q));
   graphics_draw_line(ctx, GPoint(x0, y0 + q), GPoint(x1, y1 - q));
   graphics_draw_line(ctx, GPoint(x1, y1 - q), GPoint(xm, y1));
-  if (!connection_service_peek_pebble_app_connection()) {
+  if (!connected) {
     graphics_draw_line(ctx, GPoint(x0 - 1, y0), GPoint(x1 + 1, y1));
   }
 }
@@ -712,8 +714,96 @@ static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, 
 // no space.
 typedef struct {
   char date[16], temp[8];
+  char steps[8], heart[8];  // "" when not available
   bool battery, bluetooth, weather;
 } Row;
+
+// ---------------------------------------------------------------------------
+// Health. Steps today and the latest heart rate, from the watch's health
+// service. Hidden where there's no data, e.g. heart rate on a watch with no
+// sensor. The face redraws every minute, which keeps both current enough.
+
+#if defined(PBL_HEALTH)
+static bool health_available(HealthMetric metric) {
+  return health_service_metric_accessible(metric, time_start_of_today(), time(NULL)) &
+         HealthServiceAccessibilityMaskAvailable;
+}
+#endif
+
+// "8432", or "12.3k" and "123k" once it gets long.
+static void format_steps(char *buf, size_t size) {
+  buf[0] = '\0';
+#if defined(PBL_HEALTH)
+  if (!health_available(HealthMetricStepCount)) return;
+  int n = (int)health_service_sum_today(HealthMetricStepCount);
+  if (n < 10000) {
+    snprintf(buf, size, "%d", n);
+  } else if (n < 100000) {
+    snprintf(buf, size, "%d.%dk", n / 1000, n / 100 % 10);
+  } else {
+    snprintf(buf, size, "%dk", n / 1000);
+  }
+#endif
+}
+
+static void format_heart(char *buf, size_t size) {
+  buf[0] = '\0';
+#if defined(PBL_HEALTH)
+  if (!health_available(HealthMetricHeartRateBPM)) return;
+  int bpm = (int)health_service_peek_current_value(HealthMetricHeartRateBPM);
+  if (bpm > 0) snprintf(buf, size, "%d", bpm);
+#endif
+}
+
+// Steps and heart rate icons fit in a square box this many pixels wide.
+static int16_t health_icon_size(void) { return s_layout.wx_size - 2; }
+
+// Two footprints, the left one a little higher.
+static void draw_steps_icon(GContext *ctx, int16_t x, int16_t y, int16_t s, GColor fg) {
+  int16_t fw = s * 2 / 5, sole = s / 2, heel = s / 5 > 1 ? s / 5 : 1;
+  int16_t foot = sole + 1 + heel;
+  graphics_context_set_fill_color(ctx, fg);
+  for (int i = 0; i < 2; i++) {
+    int16_t fx = i ? x + s - fw : x, fy = i ? y + s - foot : y;
+    graphics_fill_rect(ctx, GRect(fx, fy, fw, sole), fw / 2, GCornersAll);
+    graphics_fill_rect(ctx, GRect(fx, fy + sole + 1, fw, heel), 0, GCornerNone);
+  }
+}
+
+// A heart: two circles over a triangle narrowing to a point at the bottom.
+static void draw_heart_icon(GContext *ctx, int16_t x, int16_t y, int16_t s, GColor fg) {
+  int16_t r = (s + 2) / 4, cx = x + (s - 1) / 2;
+  graphics_context_set_fill_color(ctx, fg);
+  graphics_context_set_stroke_color(ctx, fg);
+  graphics_fill_circle(ctx, GPoint(x + r, y + r), r);
+  graphics_fill_circle(ctx, GPoint(x + s - 1 - r, y + r), r);
+  int16_t top = y + r, bottom = y + s - 1, rows = bottom - top;
+  for (int16_t yy = top; yy <= bottom; yy++) {
+    int16_t half = rows ? (s / 2) * (bottom - yy) / rows : 0;
+    graphics_draw_line(ctx, GPoint(cx - half, yy), GPoint(x + s - 1 - (cx - x) + half, yy));
+  }
+}
+
+// Width of an icon followed by its number, or 0 when there's no number.
+static int16_t health_width(const char *text) {
+  if (!text[0]) return 0;
+  return health_icon_size() + ICON_GAP + text_width(text, s_layout.temp_font);
+}
+
+static void draw_health(GContext *ctx, uint8_t item, int16_t x, const char *text, GColor fg) {
+  const Layout *l = &s_layout;
+  int16_t s = health_icon_size(), y = l->row_cy - s / 2;
+  if (item == ITEM_STEPS) {
+    draw_steps_icon(ctx, x, y, s, fg);
+  } else {
+    draw_heart_icon(ctx, x, y, s, fg);
+  }
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, text, l->temp_font,
+                     GRect(x + s + ICON_GAP, l->temp_y, text_width(text, l->temp_font) + 4,
+                           l->date.size.h),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
 
 // The date in the chosen format. `shorter` drops the weekday or the month
 // (per settings) from formats that have both, and the year from ISO.
@@ -776,6 +866,8 @@ static int16_t item_width(const Row *r, uint8_t item) {
       int16_t bat = item_width(r, ITEM_BATTERY), bt = item_width(r, ITEM_BLUETOOTH);
       return bat && bt ? bat + STATUS_GAP + bt : bat + bt;
     }
+    case ITEM_STEPS: return health_width(r->steps);
+    case ITEM_HEART_RATE: return health_width(r->heart);
   }
   return 0;
 }
@@ -809,6 +901,12 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, GCol
       draw_item(ctx, r, ITEM_BATTERY, x, fg, bg);
       if (r->battery) x += l->battery.w + STATUS_GAP;
       draw_item(ctx, r, ITEM_BLUETOOTH, x, fg, bg);
+      break;
+    case ITEM_STEPS:
+      if (r->steps[0]) draw_health(ctx, item, x, r->steps, fg);
+      break;
+    case ITEM_HEART_RATE:
+      if (r->heart[0]) draw_health(ctx, item, x, r->heart, fg);
       break;
   }
 }
@@ -867,6 +965,15 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
               .bluetooth = bluetooth_shown(), .weather = weather_shown() };
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
+  }
+  // Health is only read when it's in the row.
+  for (int i = 0; i < NUM_ZONES; i++) {
+    if (s_game.zones[i] == ITEM_STEPS && !row.steps[0]) {
+      format_steps(row.steps, sizeof(row.steps));
+    }
+    if (s_game.zones[i] == ITEM_HEART_RATE && !row.heart[0]) {
+      format_heart(row.heart, sizeof(row.heart));
+    }
   }
   format_date(row.date, sizeof(row.date), t, false);
   int16_t xs[NUM_ZONES], ws[NUM_ZONES];

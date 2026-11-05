@@ -15,7 +15,9 @@ function zoneSelect(key, label, value) {
       { label: 'Weather', value: 'weather' },
       { label: 'Battery', value: 'battery' },
       { label: 'Bluetooth', value: 'bluetooth' },
-      { label: 'Battery and Bluetooth', value: 'status' }
+      { label: 'Battery and Bluetooth', value: 'status' },
+      { label: 'Steps today', value: 'steps' },
+      { label: 'Heart rate', value: 'heartRate' }
     ]
   };
 }

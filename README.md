@@ -18,7 +18,8 @@ emulator, so spacing on a real watch will differ slightly.
 - Time (12/24 hour follows the watch setting), with optional seconds in a
   smaller font, plus a large team logo
 - A top row with three spots, left, middle and right, each holding the date,
-  the weather, the battery, Bluetooth, or the battery and Bluetooth together.
+  the weather, the battery, Bluetooth, the battery and Bluetooth together,
+  steps today, or heart rate.
   By default: weather, date, battery and Bluetooth. On rectangular watches
   the middle is balanced between the other two (or the screen edge where one
   is empty) or centered on the screen. Round watches have no corners, so
@@ -36,7 +37,10 @@ emulator, so spacing on a real watch will differ slightly.
 - Battery indicator: on color watches it turns yellow at 40% or less, red at
   20% or less, and green while charging
 - Bluetooth indicator: shown only while the phone is disconnected (with a
-  slash through it), always, or never
+  slash through it, red on color watches), always, or never
+- Steps today (`8432`, then `12.3k`) and the latest heart rate, each with a
+  small icon, from the watch's health data. Heart rate is hidden on watches
+  without a sensor
 - Split view: your team's next game with both logos, the background split
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
@@ -67,7 +71,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
 | Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
-| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth | Weather / Date / Battery and Bluetooth |
+| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate | Weather / Date / Battery and Bluetooth |
 | Middle position | Balanced between left and right (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
@@ -181,8 +185,8 @@ If a logo is mostly black or the team's background color, add a swap to
 - Not yet run in the emulator or on a watch. The C code has been
   type-checked against a stub header, and the phone code tested in Node
   against the live ticker and a made-up live/final game.
-- The three-spot top row, Bluetooth icon, date formats and 24 hour start
-  times are type-checked, and the row placement and formatting were run on
+- The three-spot top row, Bluetooth icon, steps, heart rate, date formats
+  and 24 hour start times are type-checked, and the row placement and formatting were run on
   a desktop with estimated font widths. Spacing needs a look in the
   emulator, especially on round watches with weather, battery and Bluetooth
   all showing.
