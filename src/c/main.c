@@ -523,17 +523,15 @@ static bool battery_shown(BatteryChargeState b) {
          (s_game.battery == BATTERY_LOW && (low || b.is_charging));
 }
 
-static bool bluetooth_shown(void) {
-  return s_game.bluetooth == BT_ALWAYS ||
-         (s_game.bluetooth == BT_DISCONNECTED && !connection_service_peek_pebble_app_connection());
+static bool bluetooth_shown(bool connected) {
+  return s_game.bluetooth == BT_ALWAYS || (s_game.bluetooth == BT_DISCONNECTED && !connected);
 }
 
 // The Bluetooth rune, about half as wide as it is tall. While the phone isn't
 // connected it has a slash through it, and is red on color watches.
-static void draw_bluetooth(GContext *ctx, GRect r, GColor fg) {
+static void draw_bluetooth(GContext *ctx, GRect r, bool connected, GColor fg) {
   int16_t x0 = r.origin.x, x1 = r.origin.x + r.size.w - 1, xm = (x0 + x1) / 2;
   int16_t y0 = r.origin.y, y1 = r.origin.y + r.size.h - 1, q = r.size.h / 4;
-  bool connected = connection_service_peek_pebble_app_connection();
   graphics_context_set_stroke_color(ctx, connected ? fg : PBL_IF_COLOR_ELSE(GColorRed, fg));
   graphics_draw_line(ctx, GPoint(xm, y0), GPoint(xm, y1));
   graphics_draw_line(ctx, GPoint(xm, y0), GPoint(x1, y0 + q));
@@ -546,8 +544,7 @@ static void draw_bluetooth(GContext *ctx, GRect r, GColor fg) {
 }
 
 // A battery outline with a nub on the right, filled to the charge level.
-static void draw_battery(GContext *ctx, GRect r, GColor fg) {
-  BatteryChargeState b = battery_state_service_peek();
+static void draw_battery(GContext *ctx, GRect r, BatteryChargeState b, GColor fg) {
   GRect body = GRect(r.origin.x, r.origin.y, r.size.w - 2, r.size.h);
   graphics_context_set_stroke_color(ctx, fg);
   graphics_draw_rect(ctx, body);
@@ -724,6 +721,9 @@ typedef struct {
   const char *steps, *heart;  // "" when not available or not in the row
   bool battery, bluetooth, weather;
   uint8_t zones[NUM_ZONES];  // ITEM_* in each zone this time round
+  // Read once per redraw and shared by everything in the row.
+  BatteryChargeState charge;
+  bool connected;
 } Row;
 
 // ---------------------------------------------------------------------------
@@ -950,13 +950,14 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int1
       break;
     case ITEM_BATTERY:
       if (r->battery) {
-        draw_battery(ctx, GRect(x, l->row_cy - l->battery.h / 2, l->battery.w, l->battery.h), fg);
+        draw_battery(ctx, GRect(x, l->row_cy - l->battery.h / 2, l->battery.w, l->battery.h),
+                     r->charge, fg);
       }
       break;
     case ITEM_BLUETOOTH:
       if (r->bluetooth) {
         draw_bluetooth(ctx, GRect(x, l->row_cy - bluetooth_h() / 2, bluetooth_w(), bluetooth_h()),
-                       fg);
+                       r->connected, fg);
       }
       break;
     case ITEM_STATUS:  // battery and Bluetooth have fixed sizes, so no width needed
@@ -1012,13 +1013,6 @@ static bool place_row(const Row *r, int16_t w, int16_t xs[], int16_t ws[]) {
   return total <= w - 2 * l->edge;
 }
 
-static bool date_in_row(const Row *r) {
-  for (int i = 0; i < NUM_ZONES; i++) {
-    if (r->zones[i] == ITEM_DATE) return true;
-  }
-  return false;
-}
-
 static bool item_in_row(const Row *r, uint8_t item) {
   for (int i = 0; i < NUM_ZONES; i++) {
     if (r->zones[i] == item) return true;
@@ -1046,14 +1040,13 @@ static void take_zone(Row *r, uint8_t item, uint8_t zone, bool taken[]) {
 // takes its spot when it isn't already showing in another one.
 static void swap_zones(Row *r) {
   bool taken[NUM_ZONES] = { false };
-  if (s_game.bt_zone && !connection_service_peek_pebble_app_connection()) {
+  if (s_game.bt_zone && !r->connected) {
     r->bluetooth = true;
     if (!item_in_row(r, ITEM_BLUETOOTH) && !item_in_row(r, ITEM_STATUS)) {
       take_zone(r, ITEM_BLUETOOTH, s_game.bt_zone, taken);
     }
   }
-  if (s_game.battery_zone &&
-      battery_state_service_peek().charge_percent <= BATTERY_LOW_PERCENT) {
+  if (s_game.battery_zone && r->charge.charge_percent <= BATTERY_LOW_PERCENT) {
     r->battery = true;
     if (!item_in_row(r, ITEM_BATTERY) && !item_in_row(r, ITEM_STATUS)) {
       take_zone(r, ITEM_BATTERY, s_game.battery_zone, taken);
@@ -1070,9 +1063,11 @@ static void swap_zones(Row *r) {
 // are the background on each half of the screen.
 static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GColor left_bg,
                      GColor right_bg) {
-  Row row = { .steps = "", .heart = "",
-              .battery = battery_shown(battery_state_service_peek()),
-              .bluetooth = bluetooth_shown(), .weather = weather_shown() };
+  Row row = { .steps = "", .heart = "", .weather = weather_shown(),
+              .charge = battery_state_service_peek(),
+              .connected = connection_service_peek_pebble_app_connection() };
+  row.battery = battery_shown(row.charge);
+  row.bluetooth = bluetooth_shown(row.connected);
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
   }
@@ -1085,7 +1080,7 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
   }
   format_date(row.date, sizeof(row.date), t, false);
   int16_t xs[NUM_ZONES], ws[NUM_ZONES];
-  if (!place_row(&row, w, xs, ws) && date_in_row(&row)) {
+  if (!place_row(&row, w, xs, ws) && item_in_row(&row, ITEM_DATE)) {
     format_date(row.date, sizeof(row.date), t, true);
     place_row(&row, w, xs, ws);
   }
