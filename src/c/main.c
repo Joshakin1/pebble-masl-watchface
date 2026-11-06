@@ -695,18 +695,20 @@ static int16_t weather_width(const char *temp) {
   return w;
 }
 
-// The weather with its left edge at x. bg is the background behind it, for
-// the icons that cut shapes out.
-static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, GColor bg) {
+// The weather with its left edge at x, w wide (from weather_width). bg is the
+// background behind it, for the icons that cut shapes out.
+static void draw_weather(GContext *ctx, int16_t x, int16_t w, const char *temp, GColor fg,
+                         GColor bg) {
   const Layout *l = &s_layout;
   if (icon_shown()) {
     draw_weather_icon(ctx, x, l->row_cy - l->wx_size / 2, l->wx_size, fg, bg);
     x += l->wx_size + ICON_GAP;
+    w -= l->wx_size + ICON_GAP;
   }
   if (!temp_shown()) return;
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, temp, l->temp_font,
-                     GRect(x, l->temp_y, text_width(temp, l->temp_font) + 4, l->date.size.h),
+                     GRect(x, l->temp_y, w + 4, l->date.size.h),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
@@ -717,7 +719,7 @@ static void draw_weather(GContext *ctx, int16_t x, const char *temp, GColor fg, 
 // no space.
 typedef struct {
   char date[16], temp[8];
-  char steps[8], heart[8];  // "" when not available
+  const char *steps, *heart;  // "" when not available or not in the row
   bool battery, bluetooth, weather;
   uint8_t zones[NUM_ZONES];  // ITEM_* in each zone this time round
 } Row;
@@ -725,7 +727,16 @@ typedef struct {
 // ---------------------------------------------------------------------------
 // Health. Steps today and the latest heart rate, from the watch's health
 // service. Hidden where there's no data, e.g. heart rate on a watch with no
-// sensor. The face redraws every minute, which keeps both current enough.
+// sensor. Each is read at most once a minute and kept until the next minute
+// tick, so redraws every second (with seconds on) don't keep asking.
+
+static char s_steps[8], s_heart[8];
+static bool s_steps_read, s_heart_read;
+
+// Called on each minute tick so the next redraw reads fresh numbers.
+static void expire_health(void) {
+  s_steps_read = s_heart_read = false;
+}
 
 #if defined(PBL_HEALTH)
 static bool health_available(HealthMetric metric) {
@@ -757,6 +768,22 @@ static void format_heart(char *buf, size_t size) {
   int bpm = (int)health_service_peek_current_value(HealthMetricHeartRateBPM);
   if (bpm > 0) snprintf(buf, size, "%d", bpm);
 #endif
+}
+
+static const char *steps_text(void) {
+  if (!s_steps_read) {
+    format_steps(s_steps, sizeof(s_steps));
+    s_steps_read = true;
+  }
+  return s_steps;
+}
+
+static const char *heart_text(void) {
+  if (!s_heart_read) {
+    format_heart(s_heart, sizeof(s_heart));
+    s_heart_read = true;
+  }
+  return s_heart;
 }
 
 // Seconds between heart rate readings while the selected team's game is live
@@ -821,7 +848,9 @@ static int16_t health_width(const char *text) {
   return health_icon_size() + ICON_GAP + text_width(text, s_layout.temp_font);
 }
 
-static void draw_health(GContext *ctx, uint8_t item, int16_t x, const char *text, GColor fg) {
+// An icon and its number with the left edge at x, w wide (from health_width).
+static void draw_health(GContext *ctx, uint8_t item, int16_t x, int16_t w, const char *text,
+                        GColor fg) {
   const Layout *l = &s_layout;
   int16_t s = health_icon_size(), y = l->row_cy - s / 2;
   if (item == ITEM_STEPS) {
@@ -831,8 +860,7 @@ static void draw_health(GContext *ctx, uint8_t item, int16_t x, const char *text
   }
   graphics_context_set_text_color(ctx, fg);
   graphics_draw_text(ctx, text, l->temp_font,
-                     GRect(x + s + ICON_GAP, l->temp_y, text_width(text, l->temp_font) + 4,
-                           l->date.size.h),
+                     GRect(x + s + ICON_GAP, l->temp_y, w - s - ICON_GAP + 4, l->date.size.h),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
 
@@ -903,19 +931,20 @@ static int16_t item_width(const Row *r, uint8_t item) {
   return 0;
 }
 
-// Draw an item with its left edge at x. bg is the background behind it.
-static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, GColor fg,
-                      GColor bg) {
+// Draw an item with its left edge at x. w is its width from item_width, so
+// text isn't measured twice. bg is the background behind it.
+static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int16_t w,
+                      GColor fg, GColor bg) {
   const Layout *l = &s_layout;
   switch (item) {
     case ITEM_DATE:
       graphics_context_set_text_color(ctx, fg);
       graphics_draw_text(ctx, r->date, l->date_font,
-                         GRect(x, l->date.origin.y, item_width(r, item) + 4, l->date.size.h),
+                         GRect(x, l->date.origin.y, w + 4, l->date.size.h),
                          GTextOverflowModeFill, GTextAlignmentLeft, NULL);
       break;
     case ITEM_WEATHER:
-      if (r->weather) draw_weather(ctx, x, r->temp, fg, bg);
+      if (r->weather) draw_weather(ctx, x, w, r->temp, fg, bg);
       break;
     case ITEM_BATTERY:
       if (r->battery) {
@@ -928,16 +957,16 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, GCol
                        fg);
       }
       break;
-    case ITEM_STATUS:
-      draw_item(ctx, r, ITEM_BATTERY, x, fg, bg);
+    case ITEM_STATUS:  // battery and Bluetooth have fixed sizes, so no width needed
+      draw_item(ctx, r, ITEM_BATTERY, x, 0, fg, bg);
       if (r->battery) x += l->battery.w + STATUS_GAP;
-      draw_item(ctx, r, ITEM_BLUETOOTH, x, fg, bg);
+      draw_item(ctx, r, ITEM_BLUETOOTH, x, 0, fg, bg);
       break;
     case ITEM_STEPS:
-      if (r->steps[0]) draw_health(ctx, item, x, r->steps, fg);
+      if (r->steps[0]) draw_health(ctx, item, x, w, r->steps, fg);
       break;
     case ITEM_HEART_RATE:
-      if (r->heart[0]) draw_health(ctx, item, x, r->heart, fg);
+      if (r->heart[0]) draw_health(ctx, item, x, w, r->heart, fg);
       break;
   }
 }
@@ -999,7 +1028,7 @@ static void live_heart_rate_zone(Row *r) {
   for (int i = 0; i < NUM_ZONES; i++) {
     if (r->zones[i] == ITEM_HEART_RATE) return;
   }
-  format_heart(r->heart, sizeof(r->heart));
+  r->heart = heart_text();
   if (r->heart[0]) r->zones[s_game.live_hr_zone - 1] = ITEM_HEART_RATE;
 }
 
@@ -1007,7 +1036,8 @@ static void live_heart_rate_zone(Row *r) {
 // are the background on each half of the screen.
 static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GColor left_bg,
                      GColor right_bg) {
-  Row row = { .battery = battery_shown(battery_state_service_peek()),
+  Row row = { .steps = "", .heart = "",
+              .battery = battery_shown(battery_state_service_peek()),
               .bluetooth = bluetooth_shown(), .weather = weather_shown() };
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
@@ -1016,12 +1046,8 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
   live_heart_rate_zone(&row);
   // Health is only read when it's in the row.
   for (int i = 0; i < NUM_ZONES; i++) {
-    if (row.zones[i] == ITEM_STEPS && !row.steps[0]) {
-      format_steps(row.steps, sizeof(row.steps));
-    }
-    if (row.zones[i] == ITEM_HEART_RATE && !row.heart[0]) {
-      format_heart(row.heart, sizeof(row.heart));
-    }
+    if (row.zones[i] == ITEM_STEPS) row.steps = steps_text();
+    if (row.zones[i] == ITEM_HEART_RATE) row.heart = heart_text();
   }
   format_date(row.date, sizeof(row.date), t, false);
   int16_t xs[NUM_ZONES], ws[NUM_ZONES];
@@ -1032,7 +1058,7 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
   for (int i = 0; i < NUM_ZONES; i++) {
     if (!ws[i]) continue;
     GColor bg = xs[i] + ws[i] / 2 < w / 2 ? left_bg : right_bg;
-    draw_item(ctx, &row, row.zones[i], xs[i], fg, bg);
+    draw_item(ctx, &row, row.zones[i], xs[i], ws[i], fg, bg);
   }
 }
 
@@ -1143,7 +1169,10 @@ static void load_game(void) {
 }
 
 static void inbox_received(DictionaryIterator *it, void *context) {
-  Game old = s_game;
+  // A byte-for-byte copy (padding included) so memcmp below can tell
+  // whether the message changed anything.
+  Game old;
+  memcpy(&old, &s_game, sizeof(old));
   int32_t n;
 
   read_string(it, MESSAGE_KEY_Team, s_game.team, sizeof(s_game.team));
@@ -1184,6 +1213,10 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_HomeScore, &n)) s_game.home_score = n;
   if (read_int(it, MESSAGE_KEY_Refresh, &n) && n > 0) s_refresh_in = n;
 
+  // Most live-game refreshes repeat what the watch already has. Skip the
+  // flash write and the redraw then.
+  if (memcmp(&old, &s_game, sizeof(s_game)) == 0) return;
+
   if (strcmp(old.team, s_game.team) != 0 || strcmp(old.away, s_game.away) != 0 ||
       strcmp(old.home, s_game.home) != 0 || old.split != s_game.split) {
     load_logos();
@@ -1203,6 +1236,7 @@ static void inbox_dropped(AppMessageResult reason, void *context) {
 
 static void tick_handler(struct tm *tick_time, TimeUnits changed) {
   if (changed & MINUTE_UNIT) {
+    expire_health();
     if (--s_refresh_in <= 0) {
       s_refresh_in = DEFAULT_REFRESH;  // until the phone answers with its own delay
       request_refresh();
