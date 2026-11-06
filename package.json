@@ -63,7 +63,8 @@
       "DateFormat",
       "DateDrop",
       "GameClock",
-      "LiveHeartRate"
+      "LiveHeartRate",
+      "LiveHeartRateZone"
     ],
     "resources": {
       "media": [

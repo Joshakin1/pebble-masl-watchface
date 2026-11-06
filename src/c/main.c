@@ -19,7 +19,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 8
+#define PERSIST_VERSION 9
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -107,6 +107,7 @@ typedef struct {
   uint8_t date_drop;     // DROP_*
   uint8_t game_clock;    // CLOCK_*: start times in the game bar
   uint8_t live_hr;       // 1 to read heart rate every minute during the team's live games
+  uint8_t live_hr_zone;  // 0 for off, or 1 + the ZONE_* that shows heart rate during them
 } Game;
 
 typedef struct {
@@ -718,6 +719,7 @@ typedef struct {
   char date[16], temp[8];
   char steps[8], heart[8];  // "" when not available
   bool battery, bluetooth, weather;
+  uint8_t zones[NUM_ZONES];  // ITEM_* in each zone this time round
 } Row;
 
 // ---------------------------------------------------------------------------
@@ -947,7 +949,7 @@ static bool place_row(const Row *r, int16_t w, int16_t xs[], int16_t ws[]) {
   int16_t total = 0;
   int shown = 0;
   for (int i = 0; i < NUM_ZONES; i++) {
-    ws[i] = item_width(r, s_game.zones[i]);
+    ws[i] = item_width(r, r->zones[i]);
     if (ws[i]) {
       total += ws[i];
       shown++;
@@ -979,11 +981,26 @@ static bool place_row(const Row *r, int16_t w, int16_t xs[], int16_t ws[]) {
   return total <= w - 2 * l->edge;
 }
 
-static bool date_in_row(void) {
+static bool date_in_row(const Row *r) {
   for (int i = 0; i < NUM_ZONES; i++) {
-    if (s_game.zones[i] == ITEM_DATE) return true;
+    if (r->zones[i] == ITEM_DATE) return true;
   }
   return false;
+}
+
+// While the selected team's game is live, put heart rate in the spot chosen
+// in settings, unless it's already showing somewhere or there's no reading,
+// in which case the spot keeps its usual item.
+static void live_heart_rate_zone(Row *r) {
+  if (!s_game.live_hr_zone || s_game.live_hr_zone > NUM_ZONES || !s_game.team[0] ||
+      s_game.state != STATE_LIVE) {
+    return;
+  }
+  for (int i = 0; i < NUM_ZONES; i++) {
+    if (r->zones[i] == ITEM_HEART_RATE) return;
+  }
+  format_heart(r->heart, sizeof(r->heart));
+  if (r->heart[0]) r->zones[s_game.live_hr_zone - 1] = ITEM_HEART_RATE;
 }
 
 // The top row, shortening the date when it doesn't fit. left_bg and right_bg
@@ -995,25 +1012,27 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
   }
+  memcpy(row.zones, s_game.zones, sizeof(row.zones));
+  live_heart_rate_zone(&row);
   // Health is only read when it's in the row.
   for (int i = 0; i < NUM_ZONES; i++) {
-    if (s_game.zones[i] == ITEM_STEPS && !row.steps[0]) {
+    if (row.zones[i] == ITEM_STEPS && !row.steps[0]) {
       format_steps(row.steps, sizeof(row.steps));
     }
-    if (s_game.zones[i] == ITEM_HEART_RATE && !row.heart[0]) {
+    if (row.zones[i] == ITEM_HEART_RATE && !row.heart[0]) {
       format_heart(row.heart, sizeof(row.heart));
     }
   }
   format_date(row.date, sizeof(row.date), t, false);
   int16_t xs[NUM_ZONES], ws[NUM_ZONES];
-  if (!place_row(&row, w, xs, ws) && date_in_row()) {
+  if (!place_row(&row, w, xs, ws) && date_in_row(&row)) {
     format_date(row.date, sizeof(row.date), t, true);
     place_row(&row, w, xs, ws);
   }
   for (int i = 0; i < NUM_ZONES; i++) {
     if (!ws[i]) continue;
     GColor bg = xs[i] + ws[i] / 2 < w / 2 ? left_bg : right_bg;
-    draw_item(ctx, &row, s_game.zones[i], xs[i], fg, bg);
+    draw_item(ctx, &row, row.zones[i], xs[i], fg, bg);
   }
 }
 
@@ -1154,6 +1173,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_DateDrop, &n)) s_game.date_drop = n;
   if (read_int(it, MESSAGE_KEY_GameClock, &n)) s_game.game_clock = n;
   if (read_int(it, MESSAGE_KEY_LiveHeartRate, &n)) s_game.live_hr = n;
+  if (read_int(it, MESSAGE_KEY_LiveHeartRateZone, &n)) s_game.live_hr_zone = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);

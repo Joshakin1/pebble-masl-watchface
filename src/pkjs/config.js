@@ -315,6 +315,21 @@ module.exports = [
                      'when the game ends. Uses noticeably more battery during games. ' +
                      'Needs a team picked and a watch with a heart rate sensor.',
         defaultValue: false
+      },
+      {
+        type: 'select',
+        messageKey: 'LiveHeartRateZone',
+        label: "During my team's games, show heart rate in",
+        description: 'That top row spot switches to heart rate while the game is ' +
+                     'live, and back when it ends. It keeps its usual item if heart ' +
+                     'rate is already in another spot or there is no reading yet.',
+        defaultValue: 'off',
+        options: [
+          { label: 'Off', value: 'off' },
+          { label: 'Left spot', value: 'left' },
+          { label: 'Middle spot', value: 'middle' },
+          { label: 'Right spot', value: 'right' }
+        ]
       }
     ]
   },

@@ -50,7 +50,7 @@ var DEFAULTS = {
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
   zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
-  gameClock: 'watch', liveHeartRate: false
+  gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off'
 };
 
 // What a top row zone can hold, in the order of the watch's ITEM_* enum.
@@ -271,7 +271,10 @@ function displayMessage(s) {
            DateFormat: Math.max(0, DATE_FORMATS.indexOf(s.dateFormat)),
            DateDrop: s.dateDrop === 'weekday' ? 1 : 0,
            GameClock: Math.max(0, ['watch', '12', '24'].indexOf(s.gameClock)),
-           LiveHeartRate: s.liveHeartRate ? 1 : 0 };
+           LiveHeartRate: s.liveHeartRate ? 1 : 0,
+           // 0 for off, or 1 + the watch's ZONE_* index.
+           LiveHeartRateZone:
+             Math.max(0, ['off', 'left', 'middle', 'right'].indexOf(s.liveHeartRateZone)) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -485,7 +488,8 @@ if (typeof Pebble !== 'undefined') {
       dateFormat: v('DateFormat', DEFAULTS.dateFormat),
       dateDrop: v('DateDrop', DEFAULTS.dateDrop),
       gameClock: v('GameClock', DEFAULTS.gameClock),
-      liveHeartRate: !!v('LiveHeartRate', DEFAULTS.liveHeartRate)
+      liveHeartRate: !!v('LiveHeartRate', DEFAULTS.liveHeartRate),
+      liveHeartRateZone: v('LiveHeartRateZone', DEFAULTS.liveHeartRateZone)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
