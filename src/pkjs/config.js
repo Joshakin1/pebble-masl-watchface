@@ -2,6 +2,23 @@
 
 var TEAMS = require('./teams');
 
+// A top row spot that something switches to while it matters, or off.
+function swapSelect(key, label, description) {
+  return {
+    type: 'select',
+    messageKey: key,
+    label: label,
+    description: description,
+    defaultValue: 'off',
+    options: [
+      { label: 'Off', value: 'off' },
+      { label: 'Left spot', value: 'left' },
+      { label: 'Middle spot', value: 'middle' },
+      { label: 'Right spot', value: 'right' }
+    ]
+  };
+}
+
 // One of the top row's three spots.
 function zoneSelect(key, label, value) {
   return {
@@ -277,7 +294,15 @@ module.exports = [
           { label: 'Always', value: 'always' },
           { label: 'Never', value: 'never' }
         ]
-      }
+      },
+      swapSelect('LowBatteryZone', 'When the battery is low, show it in',
+                 'At 40% or less that top row spot switches to the battery, ' +
+                 'even if Show battery is Never, and back once it charges. ' +
+                 'Does nothing if the battery is already in another spot.'),
+      swapSelect('DisconnectedZone', 'When the phone disconnects, show Bluetooth in',
+                 'That top row spot switches to the Bluetooth icon until the ' +
+                 'phone reconnects. Does nothing if Bluetooth is already in ' +
+                 'another spot. If both pick the same spot, it shows both.')
     ]
   },
   {

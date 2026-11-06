@@ -45,9 +45,12 @@ emulator, so spacing on a real watch will differ slightly.
   asks the watch for one-minute readings when the game goes live, and
   cancels the request when it ends, when the face closes, or when the
   setting is off, so the watch goes back to its own schedule
-- Optionally, one top row spot switches to heart rate while your team's
-  game is live, and back when it ends. It keeps its usual item if heart
-  rate is already showing elsewhere or there's no reading yet
+- Spots that switch when something matters: one can show the battery when
+  it's low (40% or less), one Bluetooth while the phone is disconnected,
+  and one heart rate while your team's game is live. Each switches back
+  afterwards, and does nothing if its item is already in another spot. If
+  more than one picks the same spot, Bluetooth comes first, then the
+  battery (the two share the spot when both apply), then heart rate
 - Split view: your team's next game with both logos, the background split
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
@@ -85,6 +88,8 @@ emulator, so spacing on a real watch will differ slightly.
 | Show seconds | On / off | Off |
 | Show battery | Always / When low (40% or less) or charging / Never | Always |
 | Show Bluetooth | Only when disconnected / Always / Never | Only when disconnected |
+| When the battery is low, show it in | Off / Left spot / Middle spot / Right spot | Off |
+| When the phone disconnects, show Bluetooth in | Off / Left spot / Middle spot / Right spot | Off |
 | Home games only | On / off (only with a team picked) | Off |
 | Show | Start time / Countdown to start | Start time |
 | Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |

@@ -19,7 +19,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 9
+#define PERSIST_VERSION 10
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -108,6 +108,8 @@ typedef struct {
   uint8_t game_clock;    // CLOCK_*: start times in the game bar
   uint8_t live_hr;       // 1 to read heart rate every minute during the team's live games
   uint8_t live_hr_zone;  // 0 for off, or 1 + the ZONE_* that shows heart rate during them
+  uint8_t battery_zone;  // 0 for off, or 1 + the ZONE_* that shows the battery when low
+  uint8_t bt_zone;       // 0 for off, or 1 + the ZONE_* that shows Bluetooth when disconnected
 } Game;
 
 typedef struct {
@@ -1017,19 +1019,51 @@ static bool date_in_row(const Row *r) {
   return false;
 }
 
-// While the selected team's game is live, put heart rate in the spot chosen
-// in settings, unless it's already showing somewhere or there's no reading,
-// in which case the spot keeps its usual item.
-static void live_heart_rate_zone(Row *r) {
-  if (!s_game.live_hr_zone || s_game.live_hr_zone > NUM_ZONES || !s_game.team[0] ||
-      s_game.state != STATE_LIVE) {
-    return;
-  }
+static bool item_in_row(const Row *r, uint8_t item) {
   for (int i = 0; i < NUM_ZONES; i++) {
-    if (r->zones[i] == ITEM_HEART_RATE) return;
+    if (r->zones[i] == item) return true;
   }
-  r->heart = heart_text();
-  if (r->heart[0]) r->zones[s_game.live_hr_zone - 1] = ITEM_HEART_RATE;
+  return false;
+}
+
+// Put item in zone (a 1-based setting, 0 for off) unless that spot was
+// already taken this time round. Bluetooth and the battery share a spot when
+// both want the same one.
+static void take_zone(Row *r, uint8_t item, uint8_t zone, bool taken[]) {
+  if (!zone || zone > NUM_ZONES) return;
+  int i = zone - 1;
+  if (!taken[i]) {
+    r->zones[i] = item;
+    taken[i] = true;
+  } else if (item == ITEM_BATTERY && r->zones[i] == ITEM_BLUETOOTH) {
+    r->zones[i] = ITEM_STATUS;
+  }
+}
+
+// Spots that change with what's going on, as chosen in settings, in order of
+// importance: Bluetooth while the phone is disconnected, the battery while
+// it's low, and heart rate while the selected team's game is live. Each only
+// takes its spot when it isn't already showing in another one.
+static void swap_zones(Row *r) {
+  bool taken[NUM_ZONES] = { false };
+  if (s_game.bt_zone && !connection_service_peek_pebble_app_connection()) {
+    r->bluetooth = true;
+    if (!item_in_row(r, ITEM_BLUETOOTH) && !item_in_row(r, ITEM_STATUS)) {
+      take_zone(r, ITEM_BLUETOOTH, s_game.bt_zone, taken);
+    }
+  }
+  if (s_game.battery_zone &&
+      battery_state_service_peek().charge_percent <= BATTERY_LOW_PERCENT) {
+    r->battery = true;
+    if (!item_in_row(r, ITEM_BATTERY) && !item_in_row(r, ITEM_STATUS)) {
+      take_zone(r, ITEM_BATTERY, s_game.battery_zone, taken);
+    }
+  }
+  if (s_game.live_hr_zone && s_game.team[0] && s_game.state == STATE_LIVE &&
+      !item_in_row(r, ITEM_HEART_RATE)) {
+    r->heart = heart_text();
+    if (r->heart[0]) take_zone(r, ITEM_HEART_RATE, s_game.live_hr_zone, taken);
+  }
 }
 
 // The top row, shortening the date when it doesn't fit. left_bg and right_bg
@@ -1043,7 +1077,7 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
   }
   memcpy(row.zones, s_game.zones, sizeof(row.zones));
-  live_heart_rate_zone(&row);
+  swap_zones(&row);
   // Health is only read when it's in the row.
   for (int i = 0; i < NUM_ZONES; i++) {
     if (row.zones[i] == ITEM_STEPS) row.steps = steps_text();
@@ -1203,6 +1237,8 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_GameClock, &n)) s_game.game_clock = n;
   if (read_int(it, MESSAGE_KEY_LiveHeartRate, &n)) s_game.live_hr = n;
   if (read_int(it, MESSAGE_KEY_LiveHeartRateZone, &n)) s_game.live_hr_zone = n;
+  if (read_int(it, MESSAGE_KEY_LowBatteryZone, &n)) s_game.battery_zone = n;
+  if (read_int(it, MESSAGE_KEY_DisconnectedZone, &n)) s_game.bt_zone = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);

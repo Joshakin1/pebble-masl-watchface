@@ -50,8 +50,15 @@ var DEFAULTS = {
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
   zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
-  gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off'
+  gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off',
+  lowBatteryZone: 'off', disconnectedZone: 'off'
 };
+
+// A spot that switches when something matters, as sent to the watch: 0 for
+// off, or 1 + the watch's ZONE_* index.
+function swapZone(v) {
+  return Math.max(0, ['off', 'left', 'middle', 'right'].indexOf(v));
+}
 
 // What a top row zone can hold, in the order of the watch's ITEM_* enum.
 var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status', 'steps',
@@ -272,9 +279,9 @@ function displayMessage(s) {
            DateDrop: s.dateDrop === 'weekday' ? 1 : 0,
            GameClock: Math.max(0, ['watch', '12', '24'].indexOf(s.gameClock)),
            LiveHeartRate: s.liveHeartRate ? 1 : 0,
-           // 0 for off, or 1 + the watch's ZONE_* index.
-           LiveHeartRateZone:
-             Math.max(0, ['off', 'left', 'middle', 'right'].indexOf(s.liveHeartRateZone)) };
+           LiveHeartRateZone: swapZone(s.liveHeartRateZone),
+           LowBatteryZone: swapZone(s.lowBatteryZone),
+           DisconnectedZone: swapZone(s.disconnectedZone) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -489,7 +496,9 @@ if (typeof Pebble !== 'undefined') {
       dateDrop: v('DateDrop', DEFAULTS.dateDrop),
       gameClock: v('GameClock', DEFAULTS.gameClock),
       liveHeartRate: !!v('LiveHeartRate', DEFAULTS.liveHeartRate),
-      liveHeartRateZone: v('LiveHeartRateZone', DEFAULTS.liveHeartRateZone)
+      liveHeartRateZone: v('LiveHeartRateZone', DEFAULTS.liveHeartRateZone),
+      lowBatteryZone: v('LowBatteryZone', DEFAULTS.lowBatteryZone),
+      disconnectedZone: v('DisconnectedZone', DEFAULTS.disconnectedZone)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
