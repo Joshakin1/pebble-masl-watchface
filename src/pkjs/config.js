@@ -305,6 +305,16 @@ module.exports = [
           { label: '2 minutes', value: '2' },
           { label: '5 minutes', value: '5' }
         ]
+      },
+      {
+        type: 'toggle',
+        messageKey: 'LiveHeartRate',
+        label: "Heart rate every minute during my team's games",
+        description: "While your team's game is live, the watch reads your heart rate " +
+                     'every minute instead of on its usual schedule, then goes back ' +
+                     'when the game ends. Uses noticeably more battery during games. ' +
+                     'Needs a team picked and a watch with a heart rate sensor.',
+        defaultValue: false
       }
     ]
   },

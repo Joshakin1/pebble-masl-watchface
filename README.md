@@ -41,6 +41,10 @@ emulator, so spacing on a real watch will differ slightly.
 - Steps today (`8432`, then `12.3k`) and the latest heart rate, each with a
   small icon, from the watch's health data. Heart rate is hidden on watches
   without a sensor
+- Optional heart rate every minute while your team's game is live. The face
+  asks the watch for one-minute readings when the game goes live, and
+  cancels the request when it ends, when the face closes, or when the
+  setting is off, so the watch goes back to its own schedule
 - Split view: your team's next game with both logos, the background split
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
@@ -85,6 +89,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Start time clock | Same as the watch's clock / 12 hour / 24 hour | Same as the watch |
 | Show scores | Off = no spoilers: period and clock only, finals skipped | Off |
 | Update scores every | 1 / 2 / 5 minutes | 1 minute |
+| Heart rate every minute during my team's games | On / off (needs a team and a heart rate sensor) | Off |
 
 ## How refreshing works
 

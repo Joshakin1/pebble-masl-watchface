@@ -19,7 +19,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 7
+#define PERSIST_VERSION 8
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -106,6 +106,7 @@ typedef struct {
   uint8_t date_format;   // DF_*
   uint8_t date_drop;     // DROP_*
   uint8_t game_clock;    // CLOCK_*: start times in the game bar
+  uint8_t live_hr;       // 1 to read heart rate every minute during the team's live games
 } Game;
 
 typedef struct {
@@ -160,6 +161,7 @@ static Layout s_layout;  // s_base moved for quick view, used for drawing
 static Game s_game;
 static GBitmap *s_logo, *s_away_logo, *s_home_logo;
 static int s_refresh_in = DEFAULT_REFRESH;
+static bool s_hr_fast;  // whether this face has asked for one-minute heart rate readings
 static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before init
 
 static void update_tick_unit(void);
@@ -755,6 +757,33 @@ static void format_heart(char *buf, size_t size) {
 #endif
 }
 
+// Seconds between heart rate readings while the selected team's game is live
+// and that setting is on.
+#define LIVE_HR_PERIOD 60
+
+// Ask for a heart rate reading every minute while the selected team's game is
+// live (if chosen in settings), and hand back to the watch's own setting
+// otherwise. The watch treats the request as a suggestion. On a watch with no
+// sensor the request fails and nothing changes.
+static void update_heart_rate_sampling(void) {
+#if defined(PBL_HEALTH)
+  bool want = s_game.live_hr && s_game.team[0] && s_game.state == STATE_LIVE;
+  if (want == s_hr_fast) return;
+  if (health_service_set_heart_rate_sample_period(want ? LIVE_HR_PERIOD : 0)) {
+    s_hr_fast = want;
+  }
+#endif
+}
+
+// Cancel the request when the face closes, so it doesn't keep the sensor
+// busy afterwards.
+static void stop_heart_rate_sampling(void) {
+#if defined(PBL_HEALTH)
+  if (s_hr_fast) health_service_set_heart_rate_sample_period(0);
+  s_hr_fast = false;
+#endif
+}
+
 // Steps and heart rate icons fit in a square box this many pixels wide.
 static int16_t health_icon_size(void) { return s_layout.wx_size - 2; }
 
@@ -1124,6 +1153,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_DateFormat, &n)) s_game.date_format = n;
   if (read_int(it, MESSAGE_KEY_DateDrop, &n)) s_game.date_drop = n;
   if (read_int(it, MESSAGE_KEY_GameClock, &n)) s_game.game_clock = n;
+  if (read_int(it, MESSAGE_KEY_LiveHeartRate, &n)) s_game.live_hr = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);
@@ -1140,6 +1170,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   }
   save_game();
   update_tick_unit();
+  update_heart_rate_sampling();
   layer_mark_dirty(s_canvas);
 }
 
@@ -1217,6 +1248,7 @@ static void init(void) {
   app_message_open(512, 64);
 
   update_tick_unit();
+  update_heart_rate_sampling();  // in case the face starts mid-game
   battery_state_service_subscribe(battery_handler);
   unobstructed_area_service_subscribe((UnobstructedAreaHandlers){
     .change = unobstructed_change,
@@ -1227,6 +1259,7 @@ static void init(void) {
 }
 
 static void deinit(void) {
+  stop_heart_rate_sampling();
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();
   unobstructed_area_service_unsubscribe();

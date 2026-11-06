@@ -62,7 +62,8 @@
       "Bluetooth",
       "DateFormat",
       "DateDrop",
-      "GameClock"
+      "GameClock",
+      "LiveHeartRate"
     ],
     "resources": {
       "media": [
