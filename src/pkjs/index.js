@@ -37,16 +37,6 @@ var WEATHER_REFRESH = 30;
 // WX_* enum in main.c.
 var WX_SUN = 1, WX_MOON = 2, WX_PARTLY_SUN = 3, WX_PARTLY_MOON = 4, WX_CLOUD = 5,
     WX_FOG = 6, WX_RAIN = 7, WX_SNOW = 8, WX_STORM = 9;
-var WX_NAMES = { sun: WX_SUN, moon: WX_MOON, partlySun: WX_PARTLY_SUN,
-                 partlyMoon: WX_PARTLY_MOON, cloud: WX_CLOUD, fog: WX_FOG, rain: WX_RAIN,
-                 snow: WX_SNOW, storm: WX_STORM };
-
-// For testing only, e.g. in CloudPebble, whose emulator can't get a location.
-// Set to { temp: 72, icon: 'rain' } to send that weather instead of looking
-// it up. icon is one of: sun, moon, partlySun, partlyMoon, cloud, fog, rain,
-// snow, storm. The weather still has to be on in settings and in a top row
-// spot. Leave null for real weather.
-var TEST_WEATHER = null;
 
 var MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
               'August', 'September', 'October', 'November', 'December'];
@@ -392,12 +382,6 @@ var weatherAsked = 0;
 function fetchWeather(s, force) {
   var now = Date.now();
   if (!weatherOn(s)) return;
-  if (TEST_WEATHER) {
-    console.log('Sending test weather');
-    send({ Temp: Math.round(TEST_WEATHER.temp) || 0,
-           WeatherIcon: WX_NAMES[TEST_WEATHER.icon] || WX_SUN });
-    return;
-  }
   if (!force && now - weatherAsked < (WEATHER_REFRESH - 5) * 60000) return;
   weatherAsked = now;
   var failed = function (why) {

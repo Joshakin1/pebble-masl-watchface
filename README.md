@@ -161,10 +161,8 @@ Use `@rebble/clay`, not the original `pebble-clay`, which breaks the `flint`
 build.
 
 CloudPebble's emulator can't get a location (its phone simulator fails with
-`name 'Position' is not defined`), so weather never arrives there. To test
-the weather icons and spacing anyway, set `TEST_WEATHER` near the top of
-`src/pkjs/index.js`, e.g. `{ temp: 72, icon: 'rain' }`, and set it back to
-`null` before installing on a real watch.
+`name 'Position' is not defined`), so weather never shows there. Check the
+weather on a real watch.
 
 To regenerate logos after changing sizes or adding a team (requires Pillow):
 
@@ -187,9 +185,12 @@ If a logo is mostly black or the team's background color, add a swap to
 
 ## Status and caveats
 
-- Not yet run in the emulator or on a watch. The C code has been
-  type-checked against a stub header, and the phone code tested in Node
-  against the live ticker and a made-up live/final game.
+- Not tested on round hardware (chalk and gabbro). Their layouts have only
+  been checked in the emulator and on a desktop, so spacing near the curved
+  edge may be off on a real round watch.
+- Running on a Pebble Time 2 (emery) and in CloudPebble's emulator. The C
+  code has also been type-checked against a stub header, and the phone code
+  tested in Node against the live ticker and a made-up live/final game.
 - The three-spot top row, Bluetooth icon, steps, heart rate, date formats
   and 24 hour start times are type-checked, and the row placement and formatting were run on
   a desktop with estimated font widths. Spacing needs a look in the
