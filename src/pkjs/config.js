@@ -34,7 +34,8 @@ function zoneSelect(key, label, value) {
       { label: 'Bluetooth', value: 'bluetooth' },
       { label: 'Battery and Bluetooth', value: 'status' },
       { label: 'Steps today', value: 'steps' },
-      { label: 'Heart rate', value: 'heartRate' }
+      { label: 'Heart rate', value: 'heartRate' },
+      { label: 'Quiet Time (only while on)', value: 'quiet' }
     ]
   };
 }
@@ -270,7 +271,7 @@ module.exports = [
   {
     type: 'section',
     items: [
-      { type: 'heading', defaultValue: 'Battery and Bluetooth' },
+      { type: 'heading', defaultValue: 'Battery, Bluetooth and Quiet Time' },
       {
         type: 'select',
         messageKey: 'Battery',
@@ -302,7 +303,12 @@ module.exports = [
       swapSelect('DisconnectedZone', 'When the phone disconnects, show Bluetooth in',
                  'That top row spot switches to the Bluetooth icon until the ' +
                  'phone reconnects. Does nothing if Bluetooth is already in ' +
-                 'another spot. If both pick the same spot, it shows both.')
+                 'another spot. If both pick the same spot, it shows both.'),
+      swapSelect('QuietTimeZone', 'When Quiet Time is on, show it in',
+                 'That top row spot switches to a crossed-out bell while Quiet ' +
+                 'Time is on, and back when it ends (within a minute). Does ' +
+                 'nothing if Quiet Time is already in another spot. Bluetooth, ' +
+                 'the battery and heart rate win if they want the same spot.')
     ]
   },
   {

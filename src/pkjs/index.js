@@ -2,6 +2,9 @@
 // Fetches the MASL score ticker from DigitalShift, picks the one game the face
 // should show (the selected team's next or live game, or the league's next
 // game when no team is selected), and sends it to the watch in one message.
+// Display settings go in a message of their own, only when the face starts
+// and when the settings page closes, so game updates stay small. The watch
+// keeps the last value of every key it was sent.
 // The watch asks for a refresh when the delay sent with each game runs out.
 // When weather is on, it also sends the temperature and conditions where the
 // phone is, from Open-Meteo, at most every half hour.
@@ -51,7 +54,7 @@ var DEFAULTS = {
   zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
   gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off',
-  lowBatteryZone: 'off', disconnectedZone: 'off'
+  lowBatteryZone: 'off', disconnectedZone: 'off', quietTimeZone: 'off'
 };
 
 // A spot that switches when something matters, as sent to the watch: 0 for
@@ -62,7 +65,7 @@ function swapZone(v) {
 
 // What a top row zone can hold, in the order of the watch's ITEM_* enum.
 var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status', 'steps',
-                  'heartRate'];
+                  'heartRate', 'quiet'];
 // Date formats, in the order of the watch's DF_* enum.
 var DATE_FORMATS = ['dayMonthDate', 'dayDate', 'monthDate', 'dateMonth', 'dayMD', 'dayDM',
                     'md', 'dm', 'iso'];
@@ -281,7 +284,8 @@ function displayMessage(s) {
            LiveHeartRate: s.liveHeartRate ? 1 : 0,
            LiveHeartRateZone: swapZone(s.liveHeartRateZone),
            LowBatteryZone: swapZone(s.lowBatteryZone),
-           DisconnectedZone: swapZone(s.disconnectedZone) };
+           DisconnectedZone: swapZone(s.disconnectedZone),
+           QuietTimeZone: swapZone(s.quietTimeZone) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -290,11 +294,10 @@ function colorValue(v) {
 }
 
 // Everything the watch needs for one game, ready for sendAppMessage. Scores
-// are -1 unless the user turned scores on.
+// are -1 unless the user turned scores on. Display settings are left out:
+// displayMessage sends those.
 function gameMessage(game, s, now) {
-  var msg = displayMessage(s);
-  msg.Refresh = refreshDelay(game, s, now);
-  msg.Status = '';
+  var msg = { Refresh: refreshDelay(game, s, now), Status: '' };
   if (!game) {
     msg.State = NONE;
     msg.Away = msg.Home = msg.Day = msg.Time = msg.Detail = '';
@@ -354,11 +357,15 @@ function getTicker(onContent, onError) {
 }
 
 // Messages go one at a time, since the weather and the game can come back
-// from the network together.
+// from the network together. A message that fails (often just the watch
+// being busy) is tried once more after a short wait, ahead of the rest so
+// they still arrive in order. Settings only go out now and then, so losing
+// one would leave the face behind until it next starts.
+var RETRY_DELAY_MS = 3000;
 var outbox = [], sending = false;
 
-function send(msg) {
-  outbox.push(msg);
+function send(data) {
+  outbox.push({ data: data, retried: false });
   if (!sending) sendNext();
 }
 
@@ -366,8 +373,14 @@ function sendNext() {
   var msg = outbox.shift();
   sending = !!msg;
   if (!msg) return;
-  Pebble.sendAppMessage(msg, sendNext, function () {
-    console.log('Failed to send ' + Object.keys(msg).join(','));
+  Pebble.sendAppMessage(msg.data, sendNext, function () {
+    if (!msg.retried) {
+      msg.retried = true;
+      outbox.unshift(msg);
+      setTimeout(sendNext, RETRY_DELAY_MS);
+      return;
+    }
+    console.log('Failed to send ' + Object.keys(msg.data).join(','));
     sendNext();
   });
 }
@@ -457,7 +470,12 @@ if (typeof Pebble !== 'undefined') {
   var clay = new Clay(require('./config'), require('./config-custom'),
                        { autoHandleEvents: false });
 
-  Pebble.addEventListener('ready', fetchGame);
+  // The watch may have lost its saved settings (a reinstall or a new
+  // PERSIST_VERSION), so send them each time the face starts.
+  Pebble.addEventListener('ready', function () {
+    send(displayMessage(loadSettings()));
+    fetchGame();
+  });
   Pebble.addEventListener('appmessage', function (e) {
     if (e.payload && 'Refresh' in e.payload) fetchGame();
   });
@@ -498,7 +516,8 @@ if (typeof Pebble !== 'undefined') {
       liveHeartRate: !!v('LiveHeartRate', DEFAULTS.liveHeartRate),
       liveHeartRateZone: v('LiveHeartRateZone', DEFAULTS.liveHeartRateZone),
       lowBatteryZone: v('LowBatteryZone', DEFAULTS.lowBatteryZone),
-      disconnectedZone: v('DisconnectedZone', DEFAULTS.disconnectedZone)
+      disconnectedZone: v('DisconnectedZone', DEFAULTS.disconnectedZone),
+      quietTimeZone: v('QuietTimeZone', DEFAULTS.quietTimeZone)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));

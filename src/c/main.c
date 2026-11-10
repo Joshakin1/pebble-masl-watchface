@@ -19,7 +19,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 10
+#define PERSIST_VERSION 11
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -34,9 +34,10 @@ enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 enum { BG_TEAM, BG_CUSTOM };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
 // What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
-// side. Keep in sync with ZONE_ITEMS in src/pkjs/index.js.
+// side. ITEM_QUIET only shows while Quiet Time is on. Keep in sync with
+// ZONE_ITEMS in src/pkjs/index.js.
 enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS,
-       ITEM_STEPS, ITEM_HEART_RATE };
+       ITEM_STEPS, ITEM_HEART_RATE, ITEM_QUIET };
 enum { ZONE_LEFT, ZONE_MIDDLE, ZONE_RIGHT, NUM_ZONES };
 // Where the middle zone goes on rectangular screens: with equal space to the
 // left and right zones (or the screen edges where they're empty), or
@@ -110,6 +111,7 @@ typedef struct {
   uint8_t live_hr_zone;  // 0 for off, or 1 + the ZONE_* that shows heart rate during them
   uint8_t battery_zone;  // 0 for off, or 1 + the ZONE_* that shows the battery when low
   uint8_t bt_zone;       // 0 for off, or 1 + the ZONE_* that shows Bluetooth when disconnected
+  uint8_t quiet_zone;    // 0 for off, or 1 + the ZONE_* that shows Quiet Time while it's on
 } Game;
 
 typedef struct {
@@ -543,6 +545,28 @@ static void draw_bluetooth(GContext *ctx, GRect r, bool connected, GColor fg) {
   }
 }
 
+// A bell with a slash through it, for Quiet Time: a round top, straight
+// sides, a wider rim and a clapper. The slash is red on color watches, with a
+// gap in the background color so it reads at this size.
+static void draw_quiet(GContext *ctx, GRect r, GColor fg, GColor bg) {
+  int16_t x0 = r.origin.x, x1 = r.origin.x + r.size.w - 1, xm = (x0 + x1) / 2;
+  int16_t y0 = r.origin.y, y1 = r.origin.y + r.size.h - 1;
+  int16_t rad = (r.size.w - 4) / 2;
+  int16_t cy = y0 + 1 + rad;
+  graphics_context_set_fill_color(ctx, fg);
+  graphics_fill_rect(ctx, GRect(xm, y0, 1, 1), 0, GCornerNone);  // the knob on top
+  graphics_fill_circle(ctx, GPoint(xm, cy), rad);
+  graphics_fill_rect(ctx, GRect(xm - rad, cy, 2 * rad + 1, y1 - 2 - cy), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(x0, y1 - 3, x1 - x0 + 1, 2), 0, GCornerNone);
+  graphics_fill_rect(ctx, GRect(xm - 1, y1, 3, 1), 0, GCornerNone);
+  graphics_context_set_stroke_width(ctx, 3);
+  graphics_context_set_stroke_color(ctx, bg);
+  graphics_draw_line(ctx, GPoint(x0, y0 + 1), GPoint(x1, y1 - 1));
+  graphics_context_set_stroke_width(ctx, 1);
+  graphics_context_set_stroke_color(ctx, PBL_IF_COLOR_ELSE(GColorRed, fg));
+  graphics_draw_line(ctx, GPoint(x0, y0 + 1), GPoint(x1, y1 - 1));
+}
+
 // A battery outline with a nub on the right, filled to the charge level.
 static void draw_battery(GContext *ctx, GRect r, BatteryChargeState b, GColor fg) {
   GRect body = GRect(r.origin.x, r.origin.y, r.size.w - 2, r.size.h);
@@ -720,6 +744,7 @@ typedef struct {
   char date[16], temp[8];
   const char *steps, *heart;  // "" when not available or not in the row
   bool battery, bluetooth, weather;
+  bool quiet;  // Quiet Time is on
   uint8_t zones[NUM_ZONES];  // ITEM_* in each zone this time round
   // Read once per redraw and shared by everything in the row.
   BatteryChargeState charge;
@@ -915,6 +940,7 @@ static void format_date(char *buf, size_t size, const struct tm *t, bool shorter
 
 static int16_t bluetooth_h(void) { return s_layout.battery.h + 2; }
 static int16_t bluetooth_w(void) { return bluetooth_h() / 2 + 1; }
+static int16_t quiet_size(void) { return bluetooth_h(); }
 
 static int16_t item_width(const Row *r, uint8_t item) {
   const Layout *l = &s_layout;
@@ -929,6 +955,7 @@ static int16_t item_width(const Row *r, uint8_t item) {
     }
     case ITEM_STEPS: return health_width(r->steps);
     case ITEM_HEART_RATE: return health_width(r->heart);
+    case ITEM_QUIET: return r->quiet ? quiet_size() : 0;
   }
   return 0;
 }
@@ -970,6 +997,12 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int1
       break;
     case ITEM_HEART_RATE:
       if (r->heart[0]) draw_health(ctx, item, x, w, r->heart, fg);
+      break;
+    case ITEM_QUIET:
+      if (r->quiet) {
+        draw_quiet(ctx, GRect(x, l->row_cy - quiet_size() / 2, quiet_size(), quiet_size()),
+                   fg, bg);
+      }
       break;
   }
 }
@@ -1036,8 +1069,9 @@ static void take_zone(Row *r, uint8_t item, uint8_t zone, bool taken[]) {
 
 // Spots that change with what's going on, as chosen in settings, in order of
 // importance: Bluetooth while the phone is disconnected, the battery while
-// it's low, and heart rate while the selected team's game is live. Each only
-// takes its spot when it isn't already showing in another one.
+// it's low, heart rate while the selected team's game is live, and Quiet Time
+// while it's on. Each only takes its spot when it isn't already showing in
+// another one.
 static void swap_zones(Row *r) {
   bool taken[NUM_ZONES] = { false };
   if (s_game.bt_zone && !r->connected) {
@@ -1057,6 +1091,9 @@ static void swap_zones(Row *r) {
     r->heart = heart_text();
     if (r->heart[0]) take_zone(r, ITEM_HEART_RATE, s_game.live_hr_zone, taken);
   }
+  if (s_game.quiet_zone && r->quiet && !item_in_row(r, ITEM_QUIET)) {
+    take_zone(r, ITEM_QUIET, s_game.quiet_zone, taken);
+  }
 }
 
 // The top row, shortening the date when it doesn't fit. left_bg and right_bg
@@ -1068,6 +1105,9 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
               .connected = connection_service_peek_pebble_app_connection() };
   row.battery = battery_shown(row.charge);
   row.bluetooth = bluetooth_shown(row.connected);
+  // There's no event for Quiet Time turning on or off, so it's checked on
+  // each redraw, at least once a minute.
+  row.quiet = quiet_time_is_active();
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
   }
@@ -1234,6 +1274,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_LiveHeartRateZone, &n)) s_game.live_hr_zone = n;
   if (read_int(it, MESSAGE_KEY_LowBatteryZone, &n)) s_game.battery_zone = n;
   if (read_int(it, MESSAGE_KEY_DisconnectedZone, &n)) s_game.bt_zone = n;
+  if (read_int(it, MESSAGE_KEY_QuietTimeZone, &n)) s_game.quiet_zone = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);

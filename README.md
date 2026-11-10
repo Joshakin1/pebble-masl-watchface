@@ -81,7 +81,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
 | Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
-| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate | Weather / Date / Battery and Bluetooth |
+| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate / Quiet Time (only while on) | Weather / Date / Battery and Bluetooth |
 | Middle position | Balanced between left and right (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
@@ -90,6 +90,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Show Bluetooth | Only when disconnected / Always / Never | Only when disconnected |
 | When the battery is low, show it in | Off / Left spot / Middle spot / Right spot | Off |
 | When the phone disconnects, show Bluetooth in | Off / Left spot / Middle spot / Right spot | Off |
+| When Quiet Time is on, show it in | Off / Left spot / Middle spot / Right spot | Off |
 | Home games only | On / off (only with a team picked) | Off |
 | Show | Start time / Countdown to start | Start time |
 | Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |
@@ -106,6 +107,10 @@ The phone picks the game and sends it to the watch in one message, along with
 how many minutes until the watch should ask again. The watch counts that down
 on its minute tick and asks; it also asks whenever the phone reconnects. The
 last game is saved on the watch, so the face isn't blank on start.
+
+Display settings travel in a separate message, sent only when the face starts
+and when the settings page closes, so each game update stays small (about 140
+bytes of the watch's 512-byte inbox).
 
 | Situation | Next check |
 | --- | --- |
