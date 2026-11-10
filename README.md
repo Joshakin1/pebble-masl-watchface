@@ -81,7 +81,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
 | Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
-| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate / Quiet Time (only while on) | Weather / Date / Battery and Bluetooth |
+| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate / Quiet Time (a bell, crossed out while on) | Weather / Date / Battery and Bluetooth |
 | Middle position | Balanced between left and right (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |

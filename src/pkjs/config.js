@@ -35,7 +35,7 @@ function zoneSelect(key, label, value) {
       { label: 'Battery and Bluetooth', value: 'status' },
       { label: 'Steps today', value: 'steps' },
       { label: 'Heart rate', value: 'heartRate' },
-      { label: 'Quiet Time (only while on)', value: 'quiet' }
+      { label: 'Quiet Time (bell, crossed out while on)', value: 'quiet' }
     ]
   };
 }

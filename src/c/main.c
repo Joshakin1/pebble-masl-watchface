@@ -34,7 +34,7 @@ enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 enum { BG_TEAM, BG_CUSTOM };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
 // What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
-// side. ITEM_QUIET only shows while Quiet Time is on. Keep in sync with
+// side. ITEM_QUIET is a bell, crossed out while Quiet Time is on. Keep in sync with
 // ZONE_ITEMS in src/pkjs/index.js.
 enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS,
        ITEM_STEPS, ITEM_HEART_RATE, ITEM_QUIET };
@@ -545,10 +545,10 @@ static void draw_bluetooth(GContext *ctx, GRect r, bool connected, GColor fg) {
   }
 }
 
-// A bell with a slash through it, for Quiet Time: a round top, straight
-// sides, a wider rim and a clapper. The slash is red on color watches, with a
-// gap in the background color so it reads at this size.
-static void draw_quiet(GContext *ctx, GRect r, GColor fg, GColor bg) {
+// A bell for Quiet Time: a round top, straight sides, a wider rim and a
+// clapper. While Quiet Time is on it has a slash through it, red on color
+// watches, with a gap in the background color so it reads at this size.
+static void draw_quiet(GContext *ctx, GRect r, bool on, GColor fg, GColor bg) {
   int16_t x0 = r.origin.x, x1 = r.origin.x + r.size.w - 1, xm = (x0 + x1) / 2;
   int16_t y0 = r.origin.y, y1 = r.origin.y + r.size.h - 1;
   int16_t rad = (r.size.w - 4) / 2;
@@ -559,6 +559,7 @@ static void draw_quiet(GContext *ctx, GRect r, GColor fg, GColor bg) {
   graphics_fill_rect(ctx, GRect(xm - rad, cy, 2 * rad + 1, y1 - 2 - cy), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(x0, y1 - 3, x1 - x0 + 1, 2), 0, GCornerNone);
   graphics_fill_rect(ctx, GRect(xm - 1, y1, 3, 1), 0, GCornerNone);
+  if (!on) return;
   graphics_context_set_stroke_width(ctx, 3);
   graphics_context_set_stroke_color(ctx, bg);
   graphics_draw_line(ctx, GPoint(x0, y0 + 1), GPoint(x1, y1 - 1));
@@ -955,7 +956,7 @@ static int16_t item_width(const Row *r, uint8_t item) {
     }
     case ITEM_STEPS: return health_width(r->steps);
     case ITEM_HEART_RATE: return health_width(r->heart);
-    case ITEM_QUIET: return r->quiet ? quiet_size() : 0;
+    case ITEM_QUIET: return quiet_size();
   }
   return 0;
 }
@@ -999,10 +1000,8 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int1
       if (r->heart[0]) draw_health(ctx, item, x, w, r->heart, fg);
       break;
     case ITEM_QUIET:
-      if (r->quiet) {
-        draw_quiet(ctx, GRect(x, l->row_cy - quiet_size() / 2, quiet_size(), quiet_size()),
-                   fg, bg);
-      }
+      draw_quiet(ctx, GRect(x, l->row_cy - quiet_size() / 2, quiet_size(), quiet_size()),
+                 r->quiet, fg, bg);
       break;
   }
 }
