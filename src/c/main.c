@@ -19,7 +19,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 11
+#define PERSIST_VERSION 12
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -62,8 +62,9 @@ enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG
 #define SECONDS_GAP 2
 #define SECONDS_DY 21
 
-// Battery levels, at or below: low (shown in yellow, and shown at all with the
-// "when low" setting) and critical (shown in red).
+// Default battery levels, at or below: low (shown in yellow, shown at all with
+// the "when low" setting, and switching a spot to the battery) and critical
+// (shown in red). Settings can change both.
 #define BATTERY_LOW_PERCENT 40
 #define BATTERY_CRITICAL_PERCENT 20
 
@@ -112,6 +113,8 @@ typedef struct {
   uint8_t battery_zone;  // 0 for off, or 1 + the ZONE_* that shows the battery when low
   uint8_t bt_zone;       // 0 for off, or 1 + the ZONE_* that shows Bluetooth when disconnected
   uint8_t quiet_zone;    // 0 for off, or 1 + the ZONE_* that shows Quiet Time while it's on
+  uint8_t battery_low;       // percent at or below which the battery counts as low
+  uint8_t battery_critical;  // percent at or below which it's critical (below battery_low)
 } Game;
 
 typedef struct {
@@ -513,14 +516,14 @@ static void draw_clock(GContext *ctx, const char *clock, int sec, GColor fg) {
 static GColor battery_color(BatteryChargeState b, GColor fg) {
 #ifdef PBL_COLOR
   if (b.is_charging) return GColorGreen;
-  if (b.charge_percent <= BATTERY_CRITICAL_PERCENT) return GColorRed;
-  if (b.charge_percent <= BATTERY_LOW_PERCENT) return GColorYellow;
+  if (b.charge_percent <= s_game.battery_critical) return GColorRed;
+  if (b.charge_percent <= s_game.battery_low) return GColorYellow;
 #endif
   return fg;
 }
 
 static bool battery_shown(BatteryChargeState b) {
-  bool low = b.charge_percent <= BATTERY_LOW_PERCENT;
+  bool low = b.charge_percent <= s_game.battery_low;
   return s_game.battery == BATTERY_ALWAYS ||
          (s_game.battery == BATTERY_LOW && (low || b.is_charging));
 }
@@ -1079,7 +1082,7 @@ static void swap_zones(Row *r) {
       take_zone(r, ITEM_BLUETOOTH, s_game.bt_zone, taken);
     }
   }
-  if (s_game.battery_zone && r->charge.charge_percent <= BATTERY_LOW_PERCENT) {
+  if (s_game.battery_zone && r->charge.charge_percent <= s_game.battery_low) {
     r->battery = true;
     if (!item_in_row(r, ITEM_BATTERY) && !item_in_row(r, ITEM_STATUS)) {
       take_zone(r, ITEM_BATTERY, s_game.battery_zone, taken);
@@ -1230,7 +1233,9 @@ static void save_game(void) {
 static void load_game(void) {
   // Same as the settings page's defaults, until the phone says otherwise.
   s_game = (Game){ .away_score = -1, .home_score = -1,
-                   .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS } };
+                   .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS },
+                   .battery_low = BATTERY_LOW_PERCENT,
+                   .battery_critical = BATTERY_CRITICAL_PERCENT };
   if (persist_read_int(PERSIST_KEY_VERSION) == PERSIST_VERSION) {
     persist_read_data(PERSIST_KEY_GAME, &s_game, sizeof(s_game));
   }
@@ -1274,6 +1279,8 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_LowBatteryZone, &n)) s_game.battery_zone = n;
   if (read_int(it, MESSAGE_KEY_DisconnectedZone, &n)) s_game.bt_zone = n;
   if (read_int(it, MESSAGE_KEY_QuietTimeZone, &n)) s_game.quiet_zone = n;
+  if (read_int(it, MESSAGE_KEY_BatteryLow, &n)) s_game.battery_low = n;
+  if (read_int(it, MESSAGE_KEY_BatteryCritical, &n)) s_game.battery_critical = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);

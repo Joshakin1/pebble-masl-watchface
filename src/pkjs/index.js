@@ -54,7 +54,8 @@ var DEFAULTS = {
   zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
   gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off',
-  lowBatteryZone: 'off', disconnectedZone: 'off', quietTimeZone: 'off'
+  lowBatteryZone: 'off', disconnectedZone: 'off', quietTimeZone: 'off',
+  batteryLow: 40, batteryCritical: 20
 };
 
 // A spot that switches when something matters, as sent to the watch: 0 for
@@ -285,7 +286,10 @@ function displayMessage(s) {
            LiveHeartRateZone: swapZone(s.liveHeartRateZone),
            LowBatteryZone: swapZone(s.lowBatteryZone),
            DisconnectedZone: swapZone(s.disconnectedZone),
-           QuietTimeZone: swapZone(s.quietTimeZone) };
+           QuietTimeZone: swapZone(s.quietTimeZone),
+           BatteryLow: s.batteryLow,
+           // Critical has to sit below low, or yellow would never show.
+           BatteryCritical: Math.min(s.batteryCritical, s.batteryLow - 10) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -517,7 +521,9 @@ if (typeof Pebble !== 'undefined') {
       liveHeartRateZone: v('LiveHeartRateZone', DEFAULTS.liveHeartRateZone),
       lowBatteryZone: v('LowBatteryZone', DEFAULTS.lowBatteryZone),
       disconnectedZone: v('DisconnectedZone', DEFAULTS.disconnectedZone),
-      quietTimeZone: v('QuietTimeZone', DEFAULTS.quietTimeZone)
+      quietTimeZone: v('QuietTimeZone', DEFAULTS.quietTimeZone),
+      batteryLow: +v('BatteryLow', DEFAULTS.batteryLow),
+      batteryCritical: +v('BatteryCritical', DEFAULTS.batteryCritical)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));

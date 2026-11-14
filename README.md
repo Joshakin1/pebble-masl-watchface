@@ -34,8 +34,9 @@ emulator, so spacing on a real watch will differ slightly.
   both (sun, moon, partly cloudy day or night, cloudy, fog, rain, snow,
   storm), in whichever top row spot is set to Weather. Hidden if it hasn't
   updated in 2 hours
-- Battery indicator: on color watches it turns yellow at 40% or less, red at
-  20% or less, and green while charging
+- Battery indicator: on color watches it turns yellow when low (40% or less
+  by default), red when critical (20% or less by default), and green while
+  charging. Both levels can be changed in settings
 - Bluetooth indicator: shown only while the phone is disconnected (with a
   slash through it, red on color watches), always, or never
 - Steps today (`8432`, then `12.3k`) and the latest heart rate, each with a
@@ -46,7 +47,7 @@ emulator, so spacing on a real watch will differ slightly.
   cancels the request when it ends, when the face closes, or when the
   setting is off, so the watch goes back to its own schedule
 - Spots that switch when something matters: one can show the battery when
-  it's low (40% or less), one Bluetooth while the phone is disconnected,
+  it's low, one Bluetooth while the phone is disconnected,
   and one heart rate while your team's game is live. Each switches back
   afterwards, and does nothing if its item is already in another spot. If
   more than one picks the same spot, Bluetooth comes first, then the
@@ -86,7 +87,9 @@ emulator, so spacing on a real watch will differ slightly.
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
 | Show seconds | On / off | Off |
-| Show battery | Always / When low (40% or less) or charging / Never | Always |
+| Show battery | Always / When low or charging / Never | Always |
+| Battery is low at | 10% to 60% or less, in steps of 10 | 40% |
+| Battery is critical at | 10% to 40% or less, in steps of 10 (kept 10% under low) | 20% |
 | Show Bluetooth | Only when disconnected / Always / Never | Only when disconnected |
 | When the battery is low, show it in | Off / Left spot / Middle spot / Right spot | Off |
 | When the phone disconnects, show Bluetooth in | Off / Left spot / Middle spot / Right spot | Off |

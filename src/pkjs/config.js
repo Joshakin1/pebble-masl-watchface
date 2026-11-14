@@ -19,6 +19,20 @@ function swapSelect(key, label, description) {
   };
 }
 
+// A battery level, in the 10% steps the watch reports.
+function percentSelect(key, label, description, value, min, max) {
+  var options = [];
+  for (var p = min; p <= max; p += 10) options.push({ label: p + '% or less', value: '' + p });
+  return {
+    type: 'select',
+    messageKey: key,
+    label: label,
+    description: description,
+    defaultValue: '' + value,
+    options: options
+  };
+}
+
 // One of the top row's three spots.
 function zoneSelect(key, label, value) {
   return {
@@ -279,10 +293,18 @@ module.exports = [
         defaultValue: 'always',
         options: [
           { label: 'Always', value: 'always' },
-          { label: 'When low (40% or less) or charging', value: 'low' },
+          { label: 'When low or charging', value: 'low' },
           { label: 'Never', value: 'never' }
         ]
       },
+      percentSelect('BatteryLow', 'Battery is low at',
+                    'Turns the battery yellow on color watches, shows it when Show ' +
+                    'battery is When low, and switches the spot chosen below.',
+                    40, 10, 60),
+      percentSelect('BatteryCritical', 'Battery is critical at',
+                    'Turns the battery red on color watches. Always kept below the ' +
+                    'low level: set at or above it, it counts as 10% under it.',
+                    20, 10, 40),
       {
         type: 'select',
         messageKey: 'Bluetooth',
@@ -297,7 +319,7 @@ module.exports = [
         ]
       },
       swapSelect('LowBatteryZone', 'When the battery is low, show it in',
-                 'At 40% or less that top row spot switches to the battery, ' +
+                 'When the battery is low, that top row spot switches to it, ' +
                  'even if Show battery is Never, and back once it charges. ' +
                  'Does nothing if the battery is already in another spot.'),
       swapSelect('DisconnectedZone', 'When the phone disconnects, show Bluetooth in',
