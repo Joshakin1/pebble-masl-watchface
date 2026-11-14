@@ -1,6 +1,6 @@
 """Rewrite resources.media in package.json from the images convert_logos.py
 made. Each team gets LOGO_<TEAM> and HALF_<TEAM>, defined once per screen
-shape so every platform gets the size made for it.
+shape so every platform gets the size made for it. The menu icon comes first.
 
 Usage: python tools/gen_resources.py
 """
@@ -23,7 +23,23 @@ PLATFORMS = {
 def main():
     teams = sorted(f[5:-4] for f in os.listdir(os.path.join(IMAGES, 'rect'))
                    if f.startswith('logo_') and f.endswith('.png'))
-    media = []
+    # The icon in the watch's watchface list: color, and a black and white copy.
+    media = [
+        {
+            'type': 'bitmap',
+            'name': 'MENU_ICON',
+            'file': 'images/menu_icon.png',
+            'menuIcon': True,
+            'targetPlatforms': ['basalt', 'chalk', 'emery', 'gabbro'],
+        },
+        {
+            'type': 'bitmap',
+            'name': 'MENU_ICON',
+            'file': 'images/bw/menu_icon.png',
+            'menuIcon': True,
+            'targetPlatforms': ['diorite', 'flint'],
+        },
+    ]
     for team in teams:
         for prefix in ('logo', 'half'):
             for shape, platforms in PLATFORMS.items():
