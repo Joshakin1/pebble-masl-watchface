@@ -3,7 +3,8 @@
 // colors, with its next (or live) game in a bar at the bottom. In split view
 // the game is shown instead as both logos on a background split down the
 // middle in each team's color. With no team selected it always shows the
-// league's next game in split view.
+// league's next game in split view. When the selected team has no game, the
+// phone can send the league's next game instead (see LEAGUE_*).
 //
 // The phone picks the game and sends it in one AppMessage, with the number of
 // minutes until the face should ask again (sooner while a game is live).
@@ -19,7 +20,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 12
+#define PERSIST_VERSION 13
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -32,6 +33,10 @@ enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
 // "3d 04:12:30".
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
 enum { BG_TEAM, BG_CUSTOM };
+// Whose game the bar shows: the selected team's own (or the league's with no
+// team picked), or, when the team has none, the league's next game with the
+// team's logo and colors kept, or in full league mode.
+enum { LEAGUE_NONE, LEAGUE_KEEP_TEAM, LEAGUE_FULL };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
 // What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
 // side. ITEM_QUIET is a bell, crossed out while Quiet Time is on. Keep in sync with
@@ -115,6 +120,7 @@ typedef struct {
   uint8_t quiet_zone;    // 0 for off, or 1 + the ZONE_* that shows Quiet Time while it's on
   uint8_t battery_low;       // percent at or below which the battery counts as low
   uint8_t battery_critical;  // percent at or below which it's critical (below battery_low)
+  uint8_t league;            // LEAGUE_*
 } Game;
 
 typedef struct {
@@ -174,6 +180,18 @@ static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before i
 
 static void update_tick_unit(void);
 
+// The team whose look the screen uses: the selected one, or "" in league
+// mode, including full league mode when the team has no game.
+static const char *view_team(void) {
+  return s_game.league == LEAGUE_FULL ? "" : s_game.team;
+}
+
+// Whether the selected team's own game is live (not a league game shown
+// because the team has none).
+static bool team_game_live(void) {
+  return s_game.team[0] && s_game.league == LEAGUE_NONE && s_game.state == STATE_LIVE;
+}
+
 static const Team *find_team(const char *name) {
   for (int i = 0; i < NUM_TEAMS; i++) {
     if (strcmp(s_teams[i].name, name) == 0) return &s_teams[i];
@@ -204,7 +222,7 @@ static void team_code(const char *name, char *out, size_t size) {
 // selected team uses the custom color from settings when chosen.
 static GColor team_bg(const Team *t) {
   if (!t) return GColorBlack;
-  if (s_game.bg_style == BG_CUSTOM && strcmp(t->name, s_game.team) == 0) {
+  if (s_game.bg_style == BG_CUSTOM && strcmp(t->name, view_team()) == 0) {
     return GColorFromHEX(s_game.bg_color);
   }
   return GColorFromHEX(t->bg);
@@ -306,7 +324,8 @@ static GBitmap *create_logo(const char *name, bool half) {
 // Split view: always for the league's next game, and for the selected
 // team's game when chosen in settings and there is a game to show.
 static bool split_view(void) {
-  return !s_game.team[0] || (s_game.split && (s_game.away[0] || s_game.home[0]));
+  if (s_game.league == LEAGUE_KEEP_TEAM) return false;
+  return !view_team()[0] || (s_game.split && (s_game.away[0] || s_game.home[0]));
 }
 
 // Only the logos on screen are loaded: the team's big one, or both halves of
@@ -316,7 +335,7 @@ static void load_logos(void) {
   destroy_logo(&s_away_logo);
   destroy_logo(&s_home_logo);
   if (!split_view()) {
-    s_logo = create_logo(s_game.team, false);
+    s_logo = create_logo(view_team(), false);
   } else {
     s_away_logo = create_logo(s_game.away, true);
     s_home_logo = create_logo(s_game.home, true);
@@ -430,7 +449,7 @@ static void format_lines(char *l1, size_t n1, char *l2, size_t n2) {
   char away[8], home[8], who[24];
   team_code(g->away, away, sizeof(away));
   team_code(g->home, home, sizeof(home));
-  if (!g->team[0]) {
+  if (!g->team[0] || g->league != LEAGUE_NONE) {
     snprintf(who, sizeof(who), "%s @ %s", away, home);
   } else {
     bool at_home = strcmp(g->home, g->team) == 0;
@@ -827,7 +846,7 @@ static const char *heart_text(void) {
 // sensor the request fails and nothing changes.
 static void update_heart_rate_sampling(void) {
 #if defined(PBL_HEALTH)
-  bool want = s_game.live_hr && s_game.team[0] && s_game.state == STATE_LIVE;
+  bool want = s_game.live_hr && team_game_live();
   if (want == s_hr_fast) return;
   if (health_service_set_heart_rate_sample_period(want ? LIVE_HR_PERIOD : 0)) {
     s_hr_fast = want;
@@ -1088,7 +1107,7 @@ static void swap_zones(Row *r) {
       take_zone(r, ITEM_BATTERY, s_game.battery_zone, taken);
     }
   }
-  if (s_game.live_hr_zone && s_game.team[0] && s_game.state == STATE_LIVE &&
+  if (s_game.live_hr_zone && team_game_live() &&
       !item_in_row(r, ITEM_HEART_RATE)) {
     r->heart = heart_text();
     if (r->heart[0]) take_zone(r, ITEM_HEART_RATE, s_game.live_hr_zone, taken);
@@ -1143,7 +1162,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // Background: the team's color, or split down the middle for a matchup.
   // The bar color comes from bar_color().
 #ifdef PBL_COLOR
-  const Team *team = find_team(s_game.team);
+  const Team *team = find_team(view_team());
   GColor left_bg = team_bg(matchup ? find_team(s_game.away) : team);
   GColor right_bg = matchup ? team_bg(find_team(s_game.home)) : left_bg;
   // Text on the background is white unless both sides are light enough for
@@ -1182,7 +1201,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
     draw_logo(ctx, s_home_logo, s_game.home, cx + l->half_dx,
               GRect(0, l->logo.origin.y, l->half_dx * 2, l->logo.size.h), fg);
   } else {
-    draw_logo(ctx, s_logo, s_game.team, cx, l->logo, fg);
+    draw_logo(ctx, s_logo, view_team(), cx, l->logo, fg);
   }
 
   // Game bar
@@ -1285,6 +1304,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);
   }
+  if (read_int(it, MESSAGE_KEY_League, &n)) s_game.league = n;
   if (read_int(it, MESSAGE_KEY_State, &n)) s_game.state = n;
   if (read_int(it, MESSAGE_KEY_Start, &n)) s_game.start = n;
   if (read_int(it, MESSAGE_KEY_AwayScore, &n)) s_game.away_score = n;
@@ -1296,7 +1316,8 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (memcmp(&old, &s_game, sizeof(s_game)) == 0) return;
 
   if (strcmp(old.team, s_game.team) != 0 || strcmp(old.away, s_game.away) != 0 ||
-      strcmp(old.home, s_game.home) != 0 || old.split != s_game.split) {
+      strcmp(old.home, s_game.home) != 0 || old.split != s_game.split ||
+      old.league != s_game.league) {
     load_logos();
   }
   save_game();

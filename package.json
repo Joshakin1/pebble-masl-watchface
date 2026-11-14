@@ -47,6 +47,8 @@
       "Refresh",
       "TimeZone",
       "HomeOnly",
+      "NoTeamGame",
+      "League",
       "ShowScores",
       "LiveInterval",
       "BgColor",

@@ -85,6 +85,19 @@ module.exports = [
         label: 'Home games only',
         description: 'Only applies when a team is picked.',
         defaultValue: false
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'NoTeamGame',
+        label: "When my team has no game listed",
+        description: 'Only applies when a team is picked.',
+        defaultValue: 'status',
+        options: [
+          { label: 'Say "No games listed"', value: 'status' },
+          { label: "Show the league's next game, keep my team's logo and colors",
+            value: 'leagueLogo' },
+          { label: "Show the league's next game in league mode", value: 'league' }
+        ]
       }
     ]
   },

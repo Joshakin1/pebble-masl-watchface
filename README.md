@@ -56,6 +56,9 @@ emulator, so spacing on a real watch will differ slightly.
   between the two teams' colors, and the bar in your team's accent color
 - League mode (no team picked): the next game anywhere in the MASL, always in
   split view with a black bar
+- When your team has no game listed: say `No games listed` (the default), or
+  show the league's next game instead, either keeping your team's logo and
+  colors or switching to league mode until your team has a game again
 - Game bar:
   - Scheduled: `@ Wave - Sat 11/28` over the start time or a countdown
     (`in 3d 4h`, `in 2h 05m`, `in 12m`; or down to minutes, `in 3d 4h 12m`;
@@ -95,6 +98,7 @@ emulator, so spacing on a real watch will differ slightly.
 | When the phone disconnects, show Bluetooth in | Off / Left spot / Middle spot / Right spot | Off |
 | When Quiet Time is on, show it in | Off / Left spot / Middle spot / Right spot | Off |
 | Home games only | On / off (only with a team picked) | Off |
+| When my team has no game listed | Say "No games listed" / League's next game, keep my team's logo and colors / League's next game in league mode (only with a team picked) | Say "No games listed" |
 | Show | Start time / Countdown to start | Start time |
 | Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |
 | Start times in | Eastern (as listed) / My time zone / Home team's time zone | Eastern |

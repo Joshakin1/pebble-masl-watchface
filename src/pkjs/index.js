@@ -47,7 +47,7 @@ var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
-  team: '', view: 'logo', homeOnly: false, mode: 'time', timeZone: 'eastern',
+  team: '', view: 'logo', homeOnly: false, noTeamGame: 'status', mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
   battery: 'always', seconds: false, countdownDetail: 'hours',
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
@@ -237,6 +237,20 @@ function pickGame(games, s, now) {
   return next || null;
 }
 
+// The team's game, or with none and the setting on, the league's game
+// instead. `league` says which: 0 for the team's own game (or no team
+// picked), 1 for the league's game with the team's look kept, 2 for the
+// league's game in full league mode.
+function pickShown(games, s, now) {
+  var game = pickGame(games, s, now);
+  if (game || !s.team || s.noTeamGame === 'status') return { game: game, league: 0 };
+  var leagueOnly = {};
+  for (var k in s) leagueOnly[k] = s[k];
+  leagueOnly.team = '';
+  game = pickGame(games, leagueOnly, now);
+  return { game: game, league: game ? (s.noTeamGame === 'league' ? 2 : 1) : 0 };
+}
+
 // Whether the weather is on and has a spot in the top row.
 function weatherOn(s) {
   return s.weather !== 'off' &&
@@ -300,8 +314,8 @@ function colorValue(v) {
 // Everything the watch needs for one game, ready for sendAppMessage. Scores
 // are -1 unless the user turned scores on. Display settings are left out:
 // displayMessage sends those.
-function gameMessage(game, s, now) {
-  var msg = { Refresh: refreshDelay(game, s, now), Status: '' };
+function gameMessage(game, s, now, league) {
+  var msg = { Refresh: refreshDelay(game, s, now), Status: '', League: league || 0 };
   if (!game) {
     msg.State = NONE;
     msg.Away = msg.Home = msg.Day = msg.Time = msg.Detail = '';
@@ -453,13 +467,13 @@ function fetchGame() {
   getTicker(function (html) {
     var s = loadSettings(), now = Date.now(), game;
     try {
-      game = pickGame(parseTicker(html), s, now);
+      game = pickShown(parseTicker(html), s, now);
     } catch (e) {
       console.log('Parse error: ' + e);
       send({ Status: 'Could not read scores', Refresh: ERROR_REFRESH });
       return;
     }
-    send(gameMessage(game, s, now));
+    send(gameMessage(game.game, s, now, game.league));
   }, function (message) {
     // Keep whatever game the watch already has; the status only shows when
     // it has none.
@@ -496,6 +510,7 @@ if (typeof Pebble !== 'undefined') {
       team: v('Team', DEFAULTS.team),
       view: v('View', DEFAULTS.view),
       homeOnly: !!v('HomeOnly', DEFAULTS.homeOnly),
+      noTeamGame: v('NoTeamGame', DEFAULTS.noTeamGame),
       mode: v('Mode', DEFAULTS.mode),
       timeZone: v('TimeZone', DEFAULTS.timeZone),
       showScores: !!v('ShowScores', DEFAULTS.showScores),
@@ -539,7 +554,7 @@ if (typeof Pebble !== 'undefined') {
 
 // Exported only so the parser can be tested outside the watch environment.
 if (typeof module !== 'undefined' && typeof Pebble === 'undefined') {
-  module.exports = { parseTicker: parseTicker, pickGame: pickGame,
+  module.exports = { parseTicker: parseTicker, pickGame: pickGame, pickShown: pickShown,
                      gameMessage: gameMessage, refreshDelay: refreshDelay,
                      weatherIcon: weatherIcon, DEFAULTS: DEFAULTS };
 }
