@@ -499,6 +499,15 @@ if (typeof Pebble !== 'undefined') {
   });
 
   Pebble.addEventListener('showConfiguration', function () {
+    // Clay only fills this in when it handles the events itself. Without the
+    // watch's details it can't tell which settings this watch can use (like
+    // colors), and the page fails to load.
+    clay.meta = {
+      activeWatchInfo: Pebble.getActiveWatchInfo && Pebble.getActiveWatchInfo(),
+      accountToken: Pebble.getAccountToken(),
+      watchToken: Pebble.getWatchToken(),
+      userData: {}
+    };
     Pebble.openURL(clay.generateUrl());
   });
 

@@ -1,17 +1,19 @@
 // Settings page, built by Clay (https://github.com/pebble-dev/clay).
+//
+// Items that only matter after another choice are shown and hidden by
+// config-custom.js, so keep the two in step when adding or renaming one.
 
 var TEAMS = require('./teams');
 
 // A top row spot that something switches to while it matters, or off.
-function swapSelect(key, label, description) {
+function swapSelect(key, label) {
   return {
     type: 'select',
     messageKey: key,
     label: label,
-    description: description,
     defaultValue: 'off',
     options: [
-      { label: 'Off', value: 'off' },
+      { label: "Don't switch", value: 'off' },
       { label: 'Left spot', value: 'left' },
       { label: 'Middle spot', value: 'middle' },
       { label: 'Right spot', value: 'right' }
@@ -49,7 +51,7 @@ function zoneSelect(key, label, value) {
       { label: 'Battery and Bluetooth', value: 'status' },
       { label: 'Steps today', value: 'steps' },
       { label: 'Heart rate', value: 'heartRate' },
-      { label: 'Quiet Time (bell, crossed out while on)', value: 'quiet' }
+      { label: 'Quiet Time bell', value: 'quiet' }
     ]
   };
 }
@@ -59,7 +61,7 @@ module.exports = [
   {
     type: 'section',
     items: [
-      { type: 'heading', defaultValue: 'Team' },
+      { type: 'heading', defaultValue: 'Team and game' },
       {
         type: 'select',
         messageKey: 'Team',
@@ -72,55 +74,44 @@ module.exports = [
         type: 'radiogroup',
         messageKey: 'View',
         label: 'Layout',
-        description: "With no team picked, the league's next game always uses the split view.",
         defaultValue: 'logo',
         options: [
           { label: 'Big team logo', value: 'logo' },
-          { label: "Split view: both logos, each team's color", value: 'split' }
+          { label: 'Split view: both logos and colors', value: 'split' }
         ]
       },
       {
         type: 'toggle',
         messageKey: 'HomeOnly',
         label: 'Home games only',
-        description: 'Only applies when a team is picked.',
         defaultValue: false
       },
       {
         type: 'radiogroup',
         messageKey: 'NoTeamGame',
-        label: "When my team has no game listed",
-        description: 'Only applies when a team is picked.',
+        label: 'If my team has no game listed',
         defaultValue: 'status',
         options: [
           { label: 'Say "No games listed"', value: 'status' },
-          { label: "Show the league's next game, keep my team's logo and colors",
-            value: 'leagueLogo' },
-          { label: "Show the league's next game in league mode", value: 'league' }
+          { label: "Show the league's next game in my team's look", value: 'leagueLogo' },
+          { label: "Show the league's next game", value: 'league' }
         ]
-      }
-    ]
-  },
-  {
-    type: 'section',
-    items: [
-      { type: 'heading', defaultValue: 'Next game' },
+      },
       {
         type: 'radiogroup',
         messageKey: 'Mode',
-        label: 'Show',
+        label: 'Before the game, show',
         defaultValue: 'time',
         options: [
           { label: 'Start time', value: 'time' },
-          { label: 'Countdown to start', value: 'countdown' }
+          { label: 'Countdown', value: 'countdown' }
         ]
       },
       {
         type: 'select',
         messageKey: 'CountdownDetail',
         label: 'Countdown shows',
-        description: 'Seconds update every second while the countdown runs, which ' +
-                     'uses more battery.',
+        description: 'Seconds use more battery.',
         defaultValue: 'hours',
         options: [
           { label: 'Days and hours (in 3d 4h)', value: 'hours' },
@@ -130,18 +121,6 @@ module.exports = [
       },
       {
         type: 'select',
-        messageKey: 'TimeZone',
-        label: 'Start times in',
-        description: 'MASL lists every game in Eastern time.',
-        defaultValue: 'eastern',
-        options: [
-          { label: 'Eastern (as listed)', value: 'eastern' },
-          { label: 'My time zone', value: 'local' },
-          { label: "Home team's time zone", value: 'home' }
-        ]
-      },
-      {
-        type: 'radiogroup',
         messageKey: 'GameClock',
         label: 'Start time clock',
         defaultValue: 'watch',
@@ -150,20 +129,30 @@ module.exports = [
           { label: '12 hour (7:05pm)', value: '12' },
           { label: '24 hour (19:05)', value: '24' }
         ]
+      },
+      {
+        type: 'select',
+        messageKey: 'TimeZone',
+        label: 'Game days and times in',
+        description: 'MASL lists every game in Eastern time.',
+        defaultValue: 'eastern',
+        options: [
+          { label: 'Eastern (as listed)', value: 'eastern' },
+          { label: 'My time zone', value: 'local' },
+          { label: "Home team's time zone", value: 'home' }
+        ]
       }
     ]
   },
   {
     type: 'section',
-    capabilities: ['COLOR'],
     items: [
-      { type: 'heading', defaultValue: 'Colors' },
+      { type: 'heading', defaultValue: 'Look' },
       {
         type: 'select',
         messageKey: 'BarColor',
         label: 'Game bar color',
-        description: "Primary and secondary are your team's colors. With no team " +
-                     'picked the bar is black unless you choose Custom.',
+        capabilities: ['COLOR'],
         defaultValue: 'primary',
         options: [
           { label: 'Team primary', value: 'primary' },
@@ -175,7 +164,7 @@ module.exports = [
         type: 'color',
         messageKey: 'CustomColor',
         label: 'Custom bar color',
-        description: 'Used when the game bar color is Custom.',
+        capabilities: ['COLOR'],
         defaultValue: '00AAAA',
         sunlight: false
       },
@@ -183,8 +172,7 @@ module.exports = [
         type: 'select',
         messageKey: 'BgColor',
         label: 'Background color',
-        description: "Custom replaces your team's color, in split view too. " +
-                     'With a light color the time and date turn black.',
+        capabilities: ['COLOR'],
         defaultValue: 'team',
         options: [
           { label: 'Team color', value: 'team' },
@@ -195,9 +183,17 @@ module.exports = [
         type: 'color',
         messageKey: 'CustomBg',
         label: 'Custom background color',
-        description: 'Used when the background color is Custom and a team is picked.',
+        description: 'With a light color, the time and date turn black.',
+        capabilities: ['COLOR'],
         defaultValue: '000000',
         sunlight: false
+      },
+      {
+        type: 'toggle',
+        messageKey: 'Seconds',
+        label: 'Show seconds',
+        description: 'Uses noticeably more battery.',
+        defaultValue: false
       }
     ]
   },
@@ -211,21 +207,18 @@ module.exports = [
       {
         type: 'radiogroup',
         messageKey: 'MiddleAlign',
-        label: 'Middle position',
-        description: 'Rectangular watches only. Balanced leaves the same space on ' +
-                     'each side, up to the left and right items (or the screen edge ' +
-                     'where one is empty), so it may sit a little off center. ' +
-                     'Round watches center the whole row, in this order.',
+        label: 'Middle item',
+        capabilities: ['RECT'],
         defaultValue: 'balanced',
         options: [
-          { label: 'Balanced between left and right', value: 'balanced' },
+          { label: 'Balanced between its neighbors', value: 'balanced' },
           { label: 'Centered on the screen', value: 'center' }
         ]
       },
       {
         type: 'select',
         messageKey: 'DateFormat',
-        label: 'Date format',
+        label: 'Date',
         defaultValue: 'dayMonthDate',
         options: [
           { label: 'WED NOV 5', value: 'dayMonthDate' },
@@ -242,39 +235,18 @@ module.exports = [
       {
         type: 'radiogroup',
         messageKey: 'DateDrop',
-        label: 'When the row is full, drop the',
-        description: 'Only when everything in the top row would not fit.',
+        label: 'If the row is too full, drop the',
         defaultValue: 'month',
         options: [
           { label: 'Month (WED 5)', value: 'month' },
           { label: 'Weekday (NOV 5 or 11/5)', value: 'weekday' }
         ]
-      }
-    ]
-  },
-  {
-    type: 'section',
-    items: [
-      { type: 'heading', defaultValue: 'Clock' },
-      {
-        type: 'toggle',
-        messageKey: 'Seconds',
-        label: 'Show seconds',
-        description: 'Redraws the face every second, which uses noticeably more battery.',
-        defaultValue: false
-      }
-    ]
-  },
-  {
-    type: 'section',
-    items: [
-      { type: 'heading', defaultValue: 'Weather' },
+      },
       {
         type: 'select',
         messageKey: 'Weather',
-        label: 'Show weather',
-        description: "From your phone's location via Open-Meteo. Updates every 30 " +
-                     'minutes. Shows in whichever top row spot is set to Weather.',
+        label: 'Weather',
+        description: "From your phone's location, every 30 minutes.",
         defaultValue: 'off',
         options: [
           { label: 'Off', value: 'off' },
@@ -286,19 +258,13 @@ module.exports = [
       {
         type: 'radiogroup',
         messageKey: 'TempUnits',
-        label: 'Units',
+        label: 'Temperature in',
         defaultValue: 'f',
         options: [
           { label: 'Fahrenheit', value: 'f' },
           { label: 'Celsius', value: 'c' }
         ]
       },
-    ]
-  },
-  {
-    type: 'section',
-    items: [
-      { type: 'heading', defaultValue: 'Battery, Bluetooth and Quiet Time' },
       {
         type: 'select',
         messageKey: 'Battery',
@@ -310,40 +276,47 @@ module.exports = [
           { label: 'Never', value: 'never' }
         ]
       },
-      percentSelect('BatteryLow', 'Battery is low at',
-                    'Turns the battery yellow on color watches, shows it when Show ' +
-                    'battery is When low, and switches the spot chosen below.',
+      percentSelect('BatteryLow', 'Battery is low at', 'Yellow on color watches.',
                     40, 10, 60),
       percentSelect('BatteryCritical', 'Battery is critical at',
-                    'Turns the battery red on color watches. Always kept below the ' +
-                    'low level: set at or above it, it counts as 10% under it.',
+                    'Red on color watches. Always kept below the low level.',
                     20, 10, 40),
       {
         type: 'select',
         messageKey: 'Bluetooth',
         label: 'Show Bluetooth',
-        description: 'The icon has a slash through it while the phone is disconnected. ' +
-                     'Scores and weather only update while connected.',
+        description: 'Slashed while the phone is disconnected.',
         defaultValue: 'disconnected',
         options: [
           { label: 'Only when disconnected', value: 'disconnected' },
           { label: 'Always', value: 'always' },
           { label: 'Never', value: 'never' }
         ]
+      }
+    ]
+  },
+  {
+    type: 'section',
+    items: [
+      { type: 'heading', defaultValue: 'Switch spots automatically' },
+      {
+        // Not saved: config-custom.js turns it on when any swap is set, and
+        // turning it off sets them all back to "Don't switch".
+        type: 'toggle',
+        id: 'Swaps',
+        label: 'Switch a top row spot when something needs attention',
+        defaultValue: false
       },
-      swapSelect('LowBatteryZone', 'When the battery is low, show it in',
-                 'When the battery is low, that top row spot switches to it, ' +
-                 'even if Show battery is Never, and back once it charges. ' +
-                 'Does nothing if the battery is already in another spot.'),
-      swapSelect('DisconnectedZone', 'When the phone disconnects, show Bluetooth in',
-                 'That top row spot switches to the Bluetooth icon until the ' +
-                 'phone reconnects. Does nothing if Bluetooth is already in ' +
-                 'another spot. If both pick the same spot, it shows both.'),
-      swapSelect('QuietTimeZone', 'When Quiet Time is on, show it in',
-                 'That top row spot switches to a crossed-out bell while Quiet ' +
-                 'Time is on, and back when it ends (within a minute). Does ' +
-                 'nothing if Quiet Time is already in another spot. Bluetooth, ' +
-                 'the battery and heart rate win if they want the same spot.')
+      {
+        type: 'text',
+        id: 'SwapsNote',
+        defaultValue: 'The spot shows it until things are back to normal. ' +
+                      'Nothing switches if it already has a spot.'
+      },
+      swapSelect('LowBatteryZone', 'Battery gets low'),
+      swapSelect('DisconnectedZone', 'Phone disconnects'),
+      swapSelect('QuietTimeZone', 'Quiet Time turns on'),
+      swapSelect('LiveHeartRateZone', "My team's game is live (heart rate)")
     ]
   },
   {
@@ -354,17 +327,13 @@ module.exports = [
         type: 'toggle',
         messageKey: 'ShowScores',
         label: 'Show scores',
-        description: 'Off is no-spoilers mode: live games show the period and clock, ' +
-                     'never the score, and finished games are skipped.',
+        description: 'Off hides scores and skips finished games.',
         defaultValue: false
       },
       {
         type: 'select',
         messageKey: 'LiveInterval',
         label: 'Update scores every',
-        description: 'Only while a game is live and scores are on. ' +
-                     'Otherwise the face checks every 5 minutes during a game ' +
-                     'and hourly between games.',
         defaultValue: '1',
         options: [
           { label: '1 minute', value: '1' },
@@ -375,27 +344,9 @@ module.exports = [
       {
         type: 'toggle',
         messageKey: 'LiveHeartRate',
-        label: "Heart rate every minute during my team's games",
-        description: "While your team's game is live, the watch reads your heart rate " +
-                     'every minute instead of on its usual schedule, then goes back ' +
-                     'when the game ends. Uses noticeably more battery during games. ' +
-                     'Needs a team picked and a watch with a heart rate sensor.',
+        label: "Read heart rate every minute during my team's games",
+        description: 'Uses more battery. Needs a heart rate sensor.',
         defaultValue: false
-      },
-      {
-        type: 'select',
-        messageKey: 'LiveHeartRateZone',
-        label: "During my team's games, show heart rate in",
-        description: 'That top row spot switches to heart rate while the game is ' +
-                     'live, and back when it ends. It keeps its usual item if heart ' +
-                     'rate is already in another spot or there is no reading yet.',
-        defaultValue: 'off',
-        options: [
-          { label: 'Off', value: 'off' },
-          { label: 'Left spot', value: 'left' },
-          { label: 'Middle spot', value: 'middle' },
-          { label: 'Right spot', value: 'right' }
-        ]
       }
     ]
   },
