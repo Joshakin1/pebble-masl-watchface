@@ -17,3 +17,6 @@ __pycache__/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Local design references
+inspiration/
