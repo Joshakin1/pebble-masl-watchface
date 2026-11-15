@@ -17,6 +17,13 @@
 
 #include <pebble.h>
 
+// Demo mode, for app store screenshots only: the clock stops at a set time,
+// the phone's messages are ignored, and each tap (`pebble emu-tap`) moves to
+// the next made-up scene (see DEMO below). tools/screenshots.sh builds with
+// MASL_DEMO=1, which defines this; in CloudPebble, uncomment the line
+// instead. Never release a build with it on.
+// #define MASL_DEMO
+
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
@@ -179,6 +186,15 @@ static bool s_hr_fast;  // whether this face has asked for one-minute heart rate
 static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before init
 
 static void update_tick_unit(void);
+
+// The time the face shows and counts from: stopped at the scene's time in
+// demo mode.
+#ifdef MASL_DEMO
+static time_t s_demo_now;
+static time_t clock_now(void) { return s_demo_now; }
+#else
+static time_t clock_now(void) { return time(NULL); }
+#endif
 
 // The team whose look the screen uses: the selected one, or "" in league
 // mode, including full league mode when the team has no game.
@@ -367,7 +383,7 @@ static void draw_logo(GContext *ctx, GBitmap *bmp, const char *name, int16_t cx,
 // Text
 
 static bool is_today(time_t when) {
-  time_t now = time(NULL);
+  time_t now = clock_now();
   struct tm today = *localtime(&now);
   struct tm then = *localtime(&when);
   return today.tm_year == then.tm_year && today.tm_yday == then.tm_yday;
@@ -375,11 +391,11 @@ static bool is_today(time_t when) {
 
 static bool countdown_running(void) {
   return s_game.state == STATE_SCHEDULED && s_game.mode == MODE_COUNTDOWN &&
-         s_game.start > (int32_t)time(NULL);
+         s_game.start > (int32_t)clock_now();
 }
 
 static void format_countdown(char *buf, size_t size, int32_t start, uint8_t detail) {
-  int32_t secs = start - (int32_t)time(NULL);
+  int32_t secs = start - (int32_t)clock_now();
   if (secs <= 0) {
     snprintf(buf, size, "Starting");
     return;
@@ -619,7 +635,7 @@ static bool temp_shown(void) {
 
 static bool weather_shown(void) {
   return (temp_shown() || icon_shown()) && s_game.weather_time &&
-         time(NULL) - s_game.weather_time < WEATHER_STALE;
+         clock_now() - s_game.weather_time < WEATHER_STALE;
 }
 
 // A sun: a disc of radius r with eight rays reaching out to `reach`.
@@ -1182,7 +1198,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   graphics_fill_rect(ctx, GRect(0, l->bar_y, b.size.w, b.size.h - l->bar_y), 0, GCornerNone);
 
   // Top row: date, weather, battery and Bluetooth, wherever settings put them.
-  time_t now = time(NULL);
+  time_t now = clock_now();
   struct tm *t = localtime(&now);
   draw_row(ctx, t, b.size.w, fg, left_bg, right_bg);
 
@@ -1249,18 +1265,120 @@ static void save_game(void) {
   persist_write_data(PERSIST_KEY_GAME, &s_game, sizeof(s_game));
 }
 
+// Same as the settings page's defaults.
+static Game default_game(void) {
+  return (Game){ .away_score = -1, .home_score = -1,
+                 .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS },
+                 .battery_low = BATTERY_LOW_PERCENT,
+                 .battery_critical = BATTERY_CRITICAL_PERCENT };
+}
+
+#ifndef MASL_DEMO
 static void load_game(void) {
-  // Same as the settings page's defaults, until the phone says otherwise.
-  s_game = (Game){ .away_score = -1, .home_score = -1,
-                   .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS },
-                   .battery_low = BATTERY_LOW_PERCENT,
-                   .battery_critical = BATTERY_CRITICAL_PERCENT };
+  // The defaults until the phone says otherwise.
+  s_game = default_game();
   if (persist_read_int(PERSIST_KEY_VERSION) == PERSIST_VERSION) {
     persist_read_data(PERSIST_KEY_GAME, &s_game, sizeof(s_game));
   }
 }
+#else
+// ---------------------------------------------------------------------------
+// Demo scenes. Keep the count and order in sync with SCENES in
+// tools/screenshots.sh. Change anything here to change the screenshots.
+
+#define DEMO_SCENES 4
+static int s_demo_scene;
+
+// November `day`, 2026 (the 21st is a Saturday), at hour:min:sec on the
+// watch's clock.
+static time_t demo_time(int day, int hour, int min, int sec) {
+  struct tm t = { .tm_year = 2026 - 1900, .tm_mon = 10, .tm_mday = day,
+                  .tm_hour = hour, .tm_min = min, .tm_sec = sec };
+  time_t when = mktime(&t);
+  // Nudge it in case mktime and localtime disagree about the time zone, so
+  // the clock reads exactly hour:min.
+  struct tm *got = localtime(&when);
+  int diff = (day - got->tm_mday) * 24 * 60 + (hour - got->tm_hour) * 60 + (min - got->tm_min);
+  return when + diff * 60;
+}
+
+static void demo_weather(Game *g, uint8_t icon, int16_t temp) {
+  g->weather = WEATHER_ICON;
+  g->wx_icon = icon;
+  g->temp = temp;
+  g->weather_time = s_demo_now;
+}
+
+static void demo_scene(int scene) {
+  s_demo_scene = scene;
+  Game g = default_game();
+  switch (scene) {
+    case 0:  // Team view: the Wave's next game, a week out
+      s_demo_now = demo_time(21, 10, 9, 0);
+      strcpy(g.team, "Wave");
+      strcpy(g.away, "Ambush");
+      strcpy(g.home, "Wave");
+      strcpy(g.day, "Sat 11/28");
+      strcpy(g.time, "7:05pm CST");
+      g.start = demo_time(28, 19, 5, 0);
+      g.state = STATE_SCHEDULED;
+      demo_weather(&g, WX_PARTLY_SUN, 41);
+      break;
+    case 1:  // Split view, live with scores
+      s_demo_now = demo_time(21, 20, 41, 0);
+      strcpy(g.team, "Ambush");
+      strcpy(g.away, "Comets");
+      strcpy(g.home, "Ambush");
+      strcpy(g.detail, "3rd 8:42");
+      g.start = demo_time(21, 19, 5, 0);
+      g.state = STATE_LIVE;
+      g.split = 1;
+      g.away_score = 4;
+      g.home_score = 6;
+      demo_weather(&g, WX_PARTLY_MOON, 38);
+      break;
+    case 2:  // League mode (no team picked) with a countdown
+      s_demo_now = demo_time(21, 15, 22, 0);
+      strcpy(g.away, "Blast");
+      strcpy(g.home, "Sockers");
+      strcpy(g.day, "Mon 11/23");
+      strcpy(g.time, "7:35pm PST");
+      g.start = demo_time(23, 19, 35, 0);
+      g.state = STATE_SCHEDULED;
+      g.mode = MODE_COUNTDOWN;
+      g.countdown = COUNTDOWN_MINUTES;
+      demo_weather(&g, WX_SUN, 58);
+      break;
+    default:  // A final, on a light custom background, with seconds
+      s_demo_now = demo_time(22, 21, 47, 23);
+      strcpy(g.team, "Strykers");
+      strcpy(g.away, "Strykers");
+      strcpy(g.home, "Wave");
+      g.start = demo_time(22, 19, 5, 0);
+      g.state = STATE_FINAL;
+      g.away_score = 7;
+      g.home_score = 5;
+      g.bg_style = BG_CUSTOM;
+      g.bg_color = 0xFFAAFF;
+      g.seconds = 1;
+      demo_weather(&g, WX_RAIN, 44);
+      break;
+  }
+  s_game = g;
+  load_logos();
+  update_tick_unit();
+  if (s_canvas) layer_mark_dirty(s_canvas);
+}
+
+static void demo_tap(AccelAxisType axis, int32_t direction) {
+  demo_scene((s_demo_scene + 1) % DEMO_SCENES);
+}
+#endif
 
 static void inbox_received(DictionaryIterator *it, void *context) {
+#ifdef MASL_DEMO
+  return;  // the scene stays as made up
+#endif
   // A byte-for-byte copy (padding included) so memcmp below can tell
   // whether the message changed anything.
   Game old;
@@ -1386,8 +1504,13 @@ static void window_unload(Window *window) {
 }
 
 static void init(void) {
+#ifdef MASL_DEMO
+  demo_scene(0);
+  accel_tap_service_subscribe(demo_tap);
+#else
   load_game();
   load_logos();
+#endif
 
   s_window = window_create();
   window_set_window_handlers(s_window, (WindowHandlers){
@@ -1412,6 +1535,9 @@ static void init(void) {
 }
 
 static void deinit(void) {
+#ifdef MASL_DEMO
+  accel_tap_service_unsubscribe();
+#endif
   stop_heart_rate_sampling();
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();

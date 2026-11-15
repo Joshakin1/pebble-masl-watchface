@@ -23,3 +23,6 @@ inspiration/
 
 # Local design mockups
 *_mock.png
+
+# App store screenshots (tools/screenshots.sh)
+screenshots/
