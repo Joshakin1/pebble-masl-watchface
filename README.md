@@ -185,6 +185,35 @@ CloudPebble's emulator can't get a location (its phone simulator fails with
 `name 'Position' is not defined`), so weather never shows there. Check the
 weather on a real watch.
 
+## App store screenshots
+
+```bash
+tools/screenshots.sh
+```
+
+This builds the face in demo mode, takes one screenshot per demo scene on
+every platform's emulator, and saves them to `screenshots/<platform>/`. It
+needs the Pebble SDK. To do only some platforms, name them:
+`tools/screenshots.sh basalt chalk`. If shots come out half drawn, give the
+face more time with `SETTLE=4 tools/screenshots.sh`.
+
+In demo mode the clock stops at a set time, the phone's messages are
+ignored, and the face shows made-up scenes with weather (which the emulator
+can't get otherwise). A tap moves to the next scene:
+
+1. Team view: the Wave's next game
+2. Split view: a live Comets at Ambush game with scores
+3. League mode with a countdown
+4. A Strykers final on a light custom background, with seconds
+
+To change a scene, edit `demo_scene()` in `src/c/main.c`. If you add or
+remove one, update `SCENES` in the script too.
+
+The script finishes with a normal build, so the `.pbw` it leaves is safe to
+release. In CloudPebble, uncomment `#define MASL_DEMO` near the top of
+`main.c`, take the screenshots with the emulator's screenshot button
+(tapping between scenes), and comment it out again before you release.
+
 To regenerate logos after changing sizes or adding a team (requires Pillow):
 
 ```bash
