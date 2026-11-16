@@ -49,7 +49,7 @@ var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
   team: '', view: 'logo', homeOnly: false, noTeamGame: 'status', mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
-  battery: 'always', seconds: false, countdownDetail: 'hours',
+  battery: 'always', seconds: false, secondsBacklight: false, countdownDetail: 'hours',
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
   zoneLeft: 'weather', zoneMiddle: 'date', zoneRight: 'status', middleAlign: 'balanced',
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
@@ -282,7 +282,8 @@ function displayMessage(s) {
            BarColor: Math.max(0, ['primary', 'secondary', 'custom'].indexOf(s.barColor)),
            CustomColor: s.customColor,
            Battery: Math.max(0, ['always', 'low', 'never'].indexOf(s.battery)),
-           Seconds: s.seconds ? 1 : 0,
+           // SECONDS_* in main.c: off, always, after a wrist flick
+           Seconds: !s.seconds ? 0 : s.secondsBacklight ? 2 : 1,
            CountdownDetail:
              Math.max(0, ['hours', 'minutes', 'seconds'].indexOf(s.countdownDetail)),
            BgColor: s.bgColor === 'custom' ? 1 : 0,
@@ -528,6 +529,7 @@ if (typeof Pebble !== 'undefined') {
       customColor: colorValue(v('CustomColor', DEFAULTS.customColor)),
       battery: v('Battery', DEFAULTS.battery),
       seconds: !!v('Seconds', DEFAULTS.seconds),
+      secondsBacklight: !!v('SecondsBacklight', DEFAULTS.secondsBacklight),
       countdownDetail: v('CountdownDetail', DEFAULTS.countdownDetail),
       bgColor: v('BgColor', DEFAULTS.bgColor),
       customBg: colorValue(v('CustomBg', DEFAULTS.customBg)),
