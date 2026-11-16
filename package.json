@@ -79,23 +79,7 @@
           "type": "bitmap",
           "name": "MENU_ICON",
           "file": "images/menu_icon.png",
-          "menuIcon": true,
-          "targetPlatforms": [
-            "basalt",
-            "chalk",
-            "emery",
-            "gabbro"
-          ]
-        },
-        {
-          "type": "bitmap",
-          "name": "MENU_ICON",
-          "file": "images/bw/menu_icon.png",
-          "menuIcon": true,
-          "targetPlatforms": [
-            "diorite",
-            "flint"
-          ]
+          "menuIcon": true
         },
         {
           "type": "bitmap",

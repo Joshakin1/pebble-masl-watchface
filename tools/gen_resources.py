@@ -23,21 +23,16 @@ PLATFORMS = {
 def main():
     teams = sorted(f[5:-4] for f in os.listdir(os.path.join(IMAGES, 'rect'))
                    if f.startswith('logo_') and f.endswith('.png'))
-    # The icon in the watch's watchface list: color, and a black and white copy.
+    # The icon in the watch's watchface list. Only one resource may be the
+    # menu icon (the SDK refuses two, even for different platforms), so the
+    # black and white copy is picked by its file name: menu_icon~bw.png is
+    # used on black and white watches, menu_icon.png on the rest.
     media = [
         {
             'type': 'bitmap',
             'name': 'MENU_ICON',
             'file': 'images/menu_icon.png',
             'menuIcon': True,
-            'targetPlatforms': ['basalt', 'chalk', 'emery', 'gabbro'],
-        },
-        {
-            'type': 'bitmap',
-            'name': 'MENU_ICON',
-            'file': 'images/bw/menu_icon.png',
-            'menuIcon': True,
-            'targetPlatforms': ['diorite', 'flint'],
         },
     ]
     for team in teams:
