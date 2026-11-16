@@ -194,6 +194,14 @@ module.exports = [
         label: 'Show seconds',
         description: 'Uses noticeably more battery.',
         defaultValue: false
+      },
+      {
+        type: 'toggle',
+        messageKey: 'SecondsBacklight',
+        label: 'Only while the backlight is on',
+        description: 'Shows seconds for a few seconds after a wrist flick, then hides them. ' +
+                     'Saves most of the battery cost. (A watchface cannot see button presses.)',
+        defaultValue: false
       }
     ]
   },

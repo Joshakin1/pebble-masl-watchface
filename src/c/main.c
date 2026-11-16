@@ -39,6 +39,12 @@ enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
 // How finely the countdown counts: "in 3d 4h", "in 3d 4h 12m" or
 // "3d 04:12:30".
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
+// When the clock shows seconds: never, always, or for a moment after a wrist
+// flick (which is what turns the backlight on; a watchface can't see the
+// backlight itself or button presses).
+enum { SECONDS_OFF, SECONDS_ALWAYS, SECONDS_BACKLIGHT };
+// How long seconds stay up after a flick, about the backlight's default.
+#define SECONDS_BACKLIGHT_MS 4000
 enum { BG_TEAM, BG_CUSTOM };
 // Whose game the bar shows: the selected team's own (or the league's with no
 // team picked), or, when the team has none, the league's next game with the
@@ -106,7 +112,7 @@ typedef struct {
   uint8_t bar_style;   // BAR_*: which color the game bar uses
   uint8_t battery;     // BATTERY_*: when to show the battery
   int32_t bar_color;   // hex color for BAR_CUSTOM
-  uint8_t seconds;     // 1 to show seconds on the clock
+  uint8_t seconds;     // SECONDS_*: when the clock shows seconds
   uint8_t countdown;   // COUNTDOWN_*
   uint8_t bg_style;    // BG_*: the selected team's background
   int32_t bg_color;    // hex color for BG_CUSTOM
@@ -184,8 +190,17 @@ static GBitmap *s_logo, *s_away_logo, *s_home_logo;
 static int s_refresh_in = DEFAULT_REFRESH;
 static bool s_hr_fast;  // whether this face has asked for one-minute heart rate readings
 static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before init
+static AppTimer *s_flick_timer;  // set while seconds show after a wrist flick
+static bool s_tap_subscribed;
+
+// Whether the clock shows seconds right now.
+static bool seconds_shown(void) {
+  return s_game.seconds == SECONDS_ALWAYS ||
+         (s_game.seconds == SECONDS_BACKLIGHT && s_flick_timer);
+}
 
 static void update_tick_unit(void);
+static void update_flick_service(void);
 
 // The time the face shows and counts from: stopped at the scene's time in
 // demo mode.
@@ -523,7 +538,7 @@ static void draw_text(GContext *ctx, const char *text, GFont font, GRect r, GCol
 // are centered together.
 static void draw_clock(GContext *ctx, const char *clock, int sec, GColor fg) {
   const Layout *l = &s_layout;
-  if (!s_game.seconds) {
+  if (!seconds_shown()) {
     draw_text(ctx, clock, l->time_font, l->time, fg);
     return;
   }
@@ -1360,7 +1375,7 @@ static void demo_scene(int scene) {
       g.home_score = 5;
       g.bg_style = BG_CUSTOM;
       g.bg_color = 0xFFAAFF;
-      g.seconds = 1;
+      g.seconds = SECONDS_ALWAYS;
       demo_weather(&g, WX_RAIN, 44);
       break;
   }
@@ -1439,6 +1454,7 @@ static void inbox_received(DictionaryIterator *it, void *context) {
     load_logos();
   }
   save_game();
+  update_flick_service();
   update_tick_unit();
   update_heart_rate_sampling();
   layer_mark_dirty(s_canvas);
@@ -1464,16 +1480,51 @@ static void tick_handler(struct tm *tick_time, TimeUnits changed) {
 }
 
 // Tick every second only while something on screen shows seconds: the clock
-// with seconds on, or a running countdown set to seconds. Otherwise every
-// minute, which is much easier on the battery.
+// with seconds on (or up after a wrist flick), or a running countdown set to
+// seconds. Otherwise every minute, which is much easier on the battery.
 static void update_tick_unit(void) {
-  bool seconds = s_game.seconds ||
+  bool seconds = seconds_shown() ||
                  (s_game.countdown == COUNTDOWN_SECONDS && countdown_running());
   TimeUnits unit = seconds ? SECOND_UNIT : MINUTE_UNIT;
   if (unit == s_tick_unit) return;
   s_tick_unit = unit;
   tick_timer_service_unsubscribe();
   tick_timer_service_subscribe(unit, tick_handler);
+}
+
+static void flick_ended(void *context) {
+  s_flick_timer = NULL;
+  update_tick_unit();
+  layer_mark_dirty(s_canvas);
+}
+
+// A wrist flick lights the backlight, so show seconds for about as long.
+static void flick_handler(AccelAxisType axis, int32_t direction) {
+  if (s_flick_timer) {
+    app_timer_reschedule(s_flick_timer, SECONDS_BACKLIGHT_MS);
+    return;
+  }
+  s_flick_timer = app_timer_register(SECONDS_BACKLIGHT_MS, flick_ended, NULL);
+  update_tick_unit();
+  layer_mark_dirty(s_canvas);
+}
+
+// Listen for flicks only while seconds are set to follow the backlight.
+static void update_flick_service(void) {
+#ifndef MASL_DEMO  // the demo uses taps to change scenes
+  bool want = s_game.seconds == SECONDS_BACKLIGHT;
+  if (want == s_tap_subscribed) return;
+  s_tap_subscribed = want;
+  if (want) {
+    accel_tap_service_subscribe(flick_handler);
+  } else {
+    accel_tap_service_unsubscribe();
+    if (s_flick_timer) {
+      app_timer_cancel(s_flick_timer);
+      s_flick_timer = NULL;
+    }
+  }
+#endif
 }
 
 static void battery_handler(BatteryChargeState state) {
@@ -1523,6 +1574,7 @@ static void init(void) {
   app_message_register_inbox_dropped(inbox_dropped);
   app_message_open(512, 64);
 
+  update_flick_service();
   update_tick_unit();
   update_heart_rate_sampling();  // in case the face starts mid-game
   battery_state_service_subscribe(battery_handler);
@@ -1538,6 +1590,8 @@ static void deinit(void) {
 #ifdef MASL_DEMO
   accel_tap_service_unsubscribe();
 #endif
+  if (s_tap_subscribed) accel_tap_service_unsubscribe();
+  if (s_flick_timer) app_timer_cancel(s_flick_timer);
   stop_heart_rate_sampling();
   tick_timer_service_unsubscribe();
   battery_state_service_unsubscribe();

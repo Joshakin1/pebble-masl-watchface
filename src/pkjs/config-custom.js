@@ -30,6 +30,7 @@ module.exports = function () {
       show('NoTeamGame', team);
       show('CountdownDetail', get('Mode') === 'countdown');
       show('GameClock', get('Mode') !== 'countdown');
+      show('SecondsBacklight', !!get('Seconds'));
 
       // Look: the custom background only replaces the picked team's color.
       show('CustomColor', get('BarColor') === 'custom');
@@ -74,7 +75,7 @@ module.exports = function () {
       });
     }
 
-    ['Team', 'Mode', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
+    ['Team', 'Mode', 'Seconds', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
      'DateFormat', 'Weather', 'Battery', 'LowBatteryZone', 'ShowScores']
       .forEach(function (key) { var i = item(key); if (i) i.on('change', update); });
     update();

@@ -90,6 +90,7 @@ emulator, so spacing on a real watch will differ slightly.
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
 | Show seconds | On / off | Off |
+| Only while the backlight is on | On / off (shows seconds for about 4 seconds after a wrist flick) | Off |
 | Show battery | Always / When low or charging / Never | Always |
 | Battery is low at | 10% to 60% or less, in steps of 10 | 40% |
 | Battery is critical at | 10% to 40% or less, in steps of 10 (kept 10% under low) | 20% |
@@ -134,7 +135,8 @@ when it's at least 25 minutes old. The phone's location is rounded to about a
 kilometer before it's sent.
 
 The face redraws once a minute. It switches to every second only while
-something on screen shows seconds: the clock with seconds on, or a running
+something on screen shows seconds: the clock with seconds on (or, with
+"only while the backlight is on", for a few seconds after a wrist flick), or a running
 countdown set to seconds. That costs noticeably more battery, which is why
 both are off by default.
 
