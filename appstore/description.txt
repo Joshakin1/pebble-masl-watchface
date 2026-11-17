@@ -1,0 +1,26 @@
+A watchface for Major Arena Soccer League fans. Pick your team and its logo fills the face in team colors, with the next game underneath. Pick no team and you get the league's next game, with both logos on a split background.
+
+GAME BAR
+• Before the game: opponent, date and start time, or a countdown ("in 2h 05m"). Shows "Today" on game day.
+• During the game: period and clock, plus the live score.
+• No-spoilers mode (the default) shows the period and clock but not the score.
+• After the game: the final score for a few hours (when scores are on).
+• Start times in Eastern, your time zone, or the home team's.
+
+YOUR FACE, YOUR WAY
+• Split view: both teams' logos and colors.
+• Team or custom colors for the background and the game bar.
+• A top row with three spots for the date, weather, battery, Bluetooth, steps, heart rate or Quiet Time.
+• Spots can switch on their own: the battery when it's low, Bluetooth when your phone disconnects, heart rate while your team is playing.
+• Nine date formats, 12/24 hour time, and optional seconds (always on, or only while the backlight is on).
+• Optional weather where you are (temperature, icon or both), from Open-Meteo. Your location is rounded to about 1 km.
+• Home games only, if that's all you want to see.
+
+BATTERY-FRIENDLY
+Your phone does the fetching. The watch checks about once an hour between games and more often during live games. Seconds and the seconds countdown are off by default.
+
+Works on Pebble Time, Time Steel, Time Round, Pebble 2, Pebble 2 Duo, Pebble Time 2 and Pebble Round 2 (color, black-and-white and round). Not available for the original Pebble or Pebble Steel.
+
+Built with AI assistance (Claude) and reviewed and tested by me.
+
+Unofficial fan project. Not affiliated with or endorsed by the MASL, its teams or DigitalShift. Team logos belong to their owners.
