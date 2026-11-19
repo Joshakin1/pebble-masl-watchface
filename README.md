@@ -19,7 +19,7 @@ emulator, so spacing on a real watch will differ slightly.
   smaller font, plus a large team logo
 - A top row with three spots, left, middle and right, each holding the date,
   the weather, the battery, Bluetooth, the battery and Bluetooth together,
-  steps today, or heart rate.
+  steps today, heart rate, the Quiet Time bell, or the UV index.
   By default: weather, date, battery and Bluetooth. On rectangular watches
   the middle is balanced between the other two (or the screen edge where one
   is empty) or centered on the screen. Round watches have no corners, so
@@ -36,7 +36,11 @@ emulator, so spacing on a real watch will differ slightly.
   updated in 2 hours
 - Battery indicator: on color watches it turns yellow when low (40% or less
   by default), red when critical (20% or less by default), and green while
-  charging. Both levels can be changed in settings
+  charging. Both levels can be changed in settings. It can show the icon,
+  the percentage (`80%`), or both
+- UV index (`UV 7`) from the same Open-Meteo weather, shown only when it's
+  high (6 or more by default; 3, 8 or 11 can be picked instead) or always.
+  It can also switch into a spot while it's high
 - Bluetooth indicator: shown only while the phone is disconnected (with a
   slash through it, red on color watches), always, or never
 - Steps today (`8432`, then `12.3k`) and the latest heart rate, each with a
@@ -69,8 +73,15 @@ emulator, so spacing on a real watch will differ slightly.
     no-spoilers mode
   - Final (scores on only): `FINAL` over the score, for up to 6 hours after
     the start time, unless the next game is sooner
+- Larger text, set separately for the top row and the game bar. Each goes
+  up one font size; the larger bar is a little taller and moves the time up.
+  When a tall logo no longer fits, the team's smaller logo is drawn instead.
+  The time stays the same size: it already uses the largest built-in digit
+  font
 - Quick view: while a timeline peek covers the bottom of the screen, the time
-  and game bar slide up above it and the logo is hidden, on every watch
+  and game bar slide up above it and the logo is hidden, on every watch. Or,
+  if chosen, the logo stays: the time moves up just above the peek, the peek
+  covers the game bar, and the top row is hidden to make room
 - Black-and-white watches get dithered logos on a white face
 
 ## Settings
@@ -85,13 +96,20 @@ emulator, so spacing on a real watch will differ slightly.
 | Custom background color | Any Pebble color, used when the background is Custom | Black |
 | Show weather | Off / Temperature / Icon / Temperature and icon | Off |
 | Units | Fahrenheit / Celsius | Fahrenheit |
-| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate / Quiet Time (a bell, crossed out while on) | Weather / Date / Battery and Bluetooth |
+| Left / Middle / Right | Empty / Date / Weather / Battery / Bluetooth / Battery and Bluetooth / Steps today / Heart rate / Quiet Time (a bell, crossed out while on) / UV index | Weather / Date / Battery and Bluetooth |
 | Middle position | Balanced between left and right (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
 | Show seconds | On / off | Off |
 | Only while the backlight is on | On / off (shows seconds for about 4 seconds after a wrist flick) | Off |
 | Show battery | Always / When low or charging / Never | Always |
+| Battery shows | Icon / Percentage / Icon and percentage | Icon |
+| Show UV index | Only when high / Always (when a spot is set to UV index) | Only when high |
+| UV index is high at | 3 / 6 / 8 / 11 or more | 6 |
+| When the UV index is high, show it in | Off / Left spot / Middle spot / Right spot | Off |
+| Larger top row text | On / off | Off |
+| Larger game bar text | On / off | Off |
+| When Quick View covers the bottom | Move the time and game bar up (hides the logo) / Keep the logo and move the time up (hides the top row and game bar) | Move up |
 | Battery is low at | 10% to 60% or less, in steps of 10 | 40% |
 | Battery is critical at | 10% to 40% or less, in steps of 10 (kept 10% under low) | 20% |
 | Show Bluetooth | Only when disconnected / Always / Never | Only when disconnected |
@@ -252,6 +270,10 @@ If a logo is mostly black or the team's background color, add a swap to
   tested in Node against the live Open-Meteo API, but their placement on
   screen (especially the weather next to the date on round watches) needs a
   look in the emulator.
+- Larger text, battery percentage, the UV index and the keep-the-logo
+  Quick View are not yet built or checked in the emulator. Their positions
+  are estimated from font sizes, so they need a look on every platform,
+  especially round watches with the larger game bar.
 - Score, live and final parsing are untested against real games until the
   season starts (Nov 27, 2026). Same caveat as MASL Scores.
 - The ticker lists about a month of games (20 as of Oct 27, 2026). A team with

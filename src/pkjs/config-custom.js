@@ -13,7 +13,8 @@ module.exports = function () {
     var showIf = function (i, on) { if (i) { if (on) i.show(); else i.hide(); } };
     var show = function (key, on) { showIf(item(key), on); };
 
-    var SWAPS = ['LowBatteryZone', 'DisconnectedZone', 'QuietTimeZone', 'LiveHeartRateZone'];
+    var SWAPS = ['LowBatteryZone', 'DisconnectedZone', 'QuietTimeZone', 'UVZone',
+                 'LiveHeartRateZone'];
     var BOTH = ['dayMonthDate', 'dayMD', 'dayDM'];  // date formats with a weekday and a month
     var swaps = clayConfig.getItemById('Swaps');
 
@@ -44,11 +45,15 @@ module.exports = function () {
       show('Weather', has('weather'));
       show('TempUnits', has('weather') && get('Weather') !== 'off');
       show('Battery', battery);
+      show('BatteryText', battery && get('Battery') !== 'never');
       var levels = (battery && get('Battery') !== 'never') ||
                    (swapsOn && get('LowBatteryZone') !== 'off');
       show('BatteryLow', levels);
       show('BatteryCritical', levels);
       show('Bluetooth', has('bluetooth') || has('status'));
+      show('UVShow', has('uv'));
+      show('UVHigh', (has('uv') && get('UVShow') !== 'always') ||
+                     (swapsOn && get('UVZone') !== 'off'));
 
       // Switch spots automatically
       showIf(clayConfig.getItemById('SwapsNote'), swapsOn);
@@ -76,7 +81,7 @@ module.exports = function () {
     }
 
     ['Team', 'Mode', 'Seconds', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
-     'DateFormat', 'Weather', 'Battery', 'LowBatteryZone', 'ShowScores']
+     'DateFormat', 'Weather', 'Battery', 'LowBatteryZone', 'UVShow', 'UVZone', 'ShowScores']
       .forEach(function (key) { var i = item(key); if (i) i.on('change', update); });
     update();
   });

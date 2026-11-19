@@ -6,8 +6,9 @@
 // and when the settings page closes, so game updates stay small. The watch
 // keeps the last value of every key it was sent.
 // The watch asks for a refresh when the delay sent with each game runs out.
-// When weather is on, it also sends the temperature and conditions where the
-// phone is, from Open-Meteo, at most every half hour.
+// When weather (or the UV index) is on, it also sends the temperature,
+// conditions and UV index where the phone is, from Open-Meteo, at most every
+// half hour.
 
 var TEAMS = require('./teams');
 
@@ -55,7 +56,9 @@ var DEFAULTS = {
   bluetooth: 'disconnected', dateFormat: 'dayMonthDate', dateDrop: 'month',
   gameClock: 'watch', liveHeartRate: false, liveHeartRateZone: 'off',
   lowBatteryZone: 'off', disconnectedZone: 'off', quietTimeZone: 'off',
-  batteryLow: 40, batteryCritical: 20
+  batteryLow: 40, batteryCritical: 20, batteryText: 'icon',
+  uvShow: 'high', uvHigh: 6, uvZone: 'off',
+  largeBar: false, largeRow: false, quickView: 'slide'
 };
 
 // A spot that switches when something matters, as sent to the watch: 0 for
@@ -66,7 +69,7 @@ function swapZone(v) {
 
 // What a top row zone can hold, in the order of the watch's ITEM_* enum.
 var ZONE_ITEMS = ['none', 'date', 'weather', 'battery', 'bluetooth', 'status', 'steps',
-                  'heartRate', 'quiet'];
+                  'heartRate', 'quiet', 'uv'];
 // Date formats, in the order of the watch's DF_* enum.
 var DATE_FORMATS = ['dayMonthDate', 'dayDate', 'monthDate', 'dateMonth', 'dayMD', 'dayDM',
                     'md', 'dm', 'iso'];
@@ -251,10 +254,16 @@ function pickShown(games, s, now) {
   return { game: game, league: game ? (s.noTeamGame === 'league' ? 2 : 1) : 0 };
 }
 
-// Whether the weather is on and has a spot in the top row.
+// Whether the UV index can show: it has a spot, or switches into one.
+function uvOn(s) {
+  return [s.zoneLeft, s.zoneMiddle, s.zoneRight].indexOf('uv') !== -1 || s.uvZone !== 'off';
+}
+
+// Whether the weather needs fetching: it's on and has a spot in the top row,
+// or the UV index (which comes with it) can show.
 function weatherOn(s) {
-  return s.weather !== 'off' &&
-         [s.zoneLeft, s.zoneMiddle, s.zoneRight].indexOf('weather') !== -1;
+  return (s.weather !== 'off' &&
+          [s.zoneLeft, s.zoneMiddle, s.zoneRight].indexOf('weather') !== -1) || uvOn(s);
 }
 
 // Minutes until the watch should ask again.
@@ -304,7 +313,14 @@ function displayMessage(s) {
            QuietTimeZone: swapZone(s.quietTimeZone),
            BatteryLow: s.batteryLow,
            // Critical has to sit below low, or yellow would never show.
-           BatteryCritical: Math.min(s.batteryCritical, s.batteryLow - 10) };
+           BatteryCritical: Math.min(s.batteryCritical, s.batteryLow - 10),
+           BatteryText: Math.max(0, ['icon', 'percent', 'both'].indexOf(s.batteryText)),
+           UVShow: s.uvShow === 'always' ? 1 : 0,
+           UVHigh: s.uvHigh,
+           UVZone: swapZone(s.uvZone),
+           LargeBar: s.largeBar ? 1 : 0,
+           LargeRow: s.largeRow ? 1 : 0,
+           QuickView: s.quickView === 'logo' ? 1 : 0 };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -437,7 +453,7 @@ function fetchWeather(s, force) {
   navigator.geolocation.getCurrentPosition(function (pos) {
     var url = WEATHER_URL + '?latitude=' + pos.coords.latitude.toFixed(2) +
               '&longitude=' + pos.coords.longitude.toFixed(2) +
-              '&current=temperature_2m,weather_code,is_day' +
+              '&current=temperature_2m,weather_code,is_day,uv_index' +
               '&temperature_unit=' + (s.tempUnits === 'c' ? 'celsius' : 'fahrenheit');
     var xhr = new XMLHttpRequest();
     xhr.open('GET', url, true);
@@ -452,7 +468,8 @@ function fetchWeather(s, force) {
         return;
       }
       send({ Temp: Math.round(c.temperature_2m),
-             WeatherIcon: weatherIcon(c.weather_code, c.is_day) });
+             WeatherIcon: weatherIcon(c.weather_code, c.is_day),
+             UV: typeof c.uv_index === 'number' ? Math.round(c.uv_index) : -1 });
     };
     xhr.onerror = function () { failed('no connection'); };
     xhr.ontimeout = function () { failed('timed out'); };
@@ -549,7 +566,14 @@ if (typeof Pebble !== 'undefined') {
       disconnectedZone: v('DisconnectedZone', DEFAULTS.disconnectedZone),
       quietTimeZone: v('QuietTimeZone', DEFAULTS.quietTimeZone),
       batteryLow: +v('BatteryLow', DEFAULTS.batteryLow),
-      batteryCritical: +v('BatteryCritical', DEFAULTS.batteryCritical)
+      batteryCritical: +v('BatteryCritical', DEFAULTS.batteryCritical),
+      batteryText: v('BatteryText', DEFAULTS.batteryText),
+      uvShow: v('UVShow', DEFAULTS.uvShow),
+      uvHigh: +v('UVHigh', DEFAULTS.uvHigh),
+      uvZone: v('UVZone', DEFAULTS.uvZone),
+      largeBar: !!v('LargeBar', DEFAULTS.largeBar),
+      largeRow: !!v('LargeRow', DEFAULTS.largeRow),
+      quickView: v('QuickView', DEFAULTS.quickView)
     };
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
