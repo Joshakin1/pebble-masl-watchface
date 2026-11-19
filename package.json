@@ -72,7 +72,15 @@
       "DisconnectedZone",
       "QuietTimeZone",
       "BatteryLow",
-      "BatteryCritical"
+      "BatteryCritical",
+      "LargeBar",
+      "LargeRow",
+      "BatteryText",
+      "UV",
+      "UVShow",
+      "UVHigh",
+      "UVZone",
+      "QuickView"
     ],
     "resources": {
       "media": [

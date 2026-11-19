@@ -11,7 +11,9 @@ YOUR FACE, YOUR WAY
 • Split view: both teams' logos and colors.
 • Team or custom colors for the background and the game bar.
 • A top row with three spots for the date, weather, battery, Bluetooth, steps, heart rate or Quiet Time.
-• Spots can switch on their own: the battery when it's low, Bluetooth when your phone disconnects, heart rate while your team is playing.
+• Spots can switch on their own: the battery when it's low, Bluetooth when your phone disconnects, heart rate while your team is playing, the UV index when it's high.
+• Larger text for the top row and the game bar, each on its own.
+• Battery as an icon, a percentage or both.
 • Nine date formats, 12/24 hour time, and optional seconds (always on, or only while the backlight is on).
 • Optional weather where you are (temperature, icon or both), from Open-Meteo. Your location is rounded to about 1 km.
 • Home games only, if that's all you want to see.

@@ -27,7 +27,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 13
+#define PERSIST_VERSION 14
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -36,6 +36,15 @@ enum { STATE_NONE, STATE_SCHEDULED, STATE_LIVE, STATE_FINAL };
 enum { MODE_START_TIME, MODE_COUNTDOWN };
 enum { BAR_PRIMARY, BAR_SECONDARY, BAR_CUSTOM };
 enum { BATTERY_ALWAYS, BATTERY_LOW, BATTERY_NEVER };
+// What the battery item shows: the icon, the percentage, or both.
+enum { BATT_ICON, BATT_PERCENT, BATT_BOTH };
+// When the UV index item shows: only at or above the "high" level, or always
+// (while the weather is fresh).
+enum { UV_WHEN_HIGH, UV_ALWAYS };
+// Quick view: slide the time and game bar up and hide the logo, or keep the
+// logo, move only the time up, and let the peek cover the game bar (the top
+// row is hidden to make room).
+enum { QV_SLIDE, QV_KEEP_LOGO };
 // How finely the countdown counts: "in 3d 4h", "in 3d 4h 12m" or
 // "3d 04:12:30".
 enum { COUNTDOWN_HOURS, COUNTDOWN_MINUTES, COUNTDOWN_SECONDS };
@@ -52,10 +61,10 @@ enum { BG_TEAM, BG_CUSTOM };
 enum { LEAGUE_NONE, LEAGUE_KEEP_TEAM, LEAGUE_FULL };
 enum { WEATHER_OFF, WEATHER_TEMP, WEATHER_ICON, WEATHER_ICON_ONLY };
 // What a top row zone holds. ITEM_STATUS is the battery and Bluetooth side by
-// side. ITEM_QUIET is a bell, crossed out while Quiet Time is on. Keep in sync with
-// ZONE_ITEMS in src/pkjs/index.js.
+// side. ITEM_QUIET is a bell, crossed out while Quiet Time is on. ITEM_UV is
+// "UV 7", from the weather. Keep in sync with ZONE_ITEMS in src/pkjs/index.js.
 enum { ITEM_NONE, ITEM_DATE, ITEM_WEATHER, ITEM_BATTERY, ITEM_BLUETOOTH, ITEM_STATUS,
-       ITEM_STEPS, ITEM_HEART_RATE, ITEM_QUIET };
+       ITEM_STEPS, ITEM_HEART_RATE, ITEM_QUIET, ITEM_UV };
 enum { ZONE_LEFT, ZONE_MIDDLE, ZONE_RIGHT, NUM_ZONES };
 // Where the middle zone goes on rectangular screens: with equal space to the
 // left and right zones (or the screen edges where they're empty), or
@@ -85,6 +94,15 @@ enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG
 // (shown in red). Settings can change both.
 #define BATTERY_LOW_PERCENT 40
 #define BATTERY_CRITICAL_PERCENT 20
+// Default UV index that counts as high (the WHO's "high" band starts at 6).
+#define UV_HIGH_DEFAULT 6
+
+// How many pixels taller than its box the big logo may be and still be
+// drawn (the time's line box has empty space at its top). Taller than that,
+// the smaller logo is drawn instead, e.g. with larger text.
+#define LOGO_SLACK 2
+// Quick view keeping the logo: the logo's box starts this far from the top.
+#define QV_LOGO_TOP 2
 
 // Space between the top row's zones, between the battery and Bluetooth when
 // they share one, and between the weather icon and the temperature.
@@ -134,6 +152,14 @@ typedef struct {
   uint8_t battery_low;       // percent at or below which the battery counts as low
   uint8_t battery_critical;  // percent at or below which it's critical (below battery_low)
   uint8_t league;            // LEAGUE_*
+  uint8_t large_bar;         // 1 for larger game bar text
+  uint8_t large_row;         // 1 for larger top row text
+  uint8_t battery_text;      // BATT_*
+  int8_t uv;                 // UV index from the weather, -1 if unknown
+  uint8_t uv_show;           // UV_*
+  uint8_t uv_high;           // UV index at or above which it counts as high
+  uint8_t uv_zone;           // 0 for off, or 1 + the ZONE_* that shows UV while it's high
+  uint8_t quick_view;        // QV_*
 } Game;
 
 typedef struct {
@@ -187,6 +213,8 @@ static Layout s_base;    // the layout with the whole screen in view
 static Layout s_layout;  // s_base moved for quick view, used for drawing
 static Game s_game;
 static GBitmap *s_logo, *s_away_logo, *s_home_logo;
+// The selected team's smaller logo, loaded only once the big one doesn't fit.
+static GBitmap *s_small_logo;
 static int s_refresh_in = DEFAULT_REFRESH;
 static bool s_hr_fast;  // whether this face has asked for one-minute heart rate readings
 static TimeUnits s_tick_unit;  // what tick_handler is subscribed to, 0 before init
@@ -311,30 +339,85 @@ static void set_layout(GRect b) {
                    .edge = 3, .row_cy = 8, .wx_size = 12, .temp_y = -2 };
   }
   bool large = w >= 200;
-  l->date_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
+
+  // Larger game bar text: each line goes up a font size. The bar grows
+  // taller, the time moves up with it, and the logo's box shrinks.
+  if (s_game.large_bar) {
+    int16_t grow = w >= 260 ? 8 : large ? 6 : l->round ? 10 : 8;
+    int16_t inset = w >= 260 ? 40 : large ? 4 : l->round ? 20 : 2;
+    int16_t l2_dy = w >= 260 ? 16 : large ? 17 : 13;  // second line, from the bar's top
+    l->bar_y -= grow;
+    l->time.origin.y -= grow;
+    l->logo.size.h -= grow;
+    l->line1 = GRect(inset, l->bar_y - 3, w - 2 * inset, large ? 28 : 22);
+    l->line2 = GRect(inset, l->bar_y + l2_dy, w - 2 * inset, large ? 34 : 28);
+  }
+  // Larger top row text: the date and numbers go up a font size and the
+  // icons grow to match. The logo's box starts lower.
+  if (s_game.large_row) {
+    int16_t grow = large ? 3 : 4;
+    l->date.origin.y -= 2;
+    l->date.size.h = large ? 34 : 30;
+    l->row_cy += large || l->round ? 1 : 2;
+    l->temp_y = l->round ? l->date.origin.y : l->temp_y + (large ? -2 : 1);
+    l->wx_size += 4;
+    l->battery = large ? GSize(24, 12) : GSize(20, 10);
+    l->logo.origin.y += grow;
+    l->logo.size.h -= grow;
+  }
+
+  bool big_row = s_game.large_row, big_bar = s_game.large_bar;
+  l->date_font = fonts_get_system_font(
+      large ? (big_row ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD)
+            : (big_row ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD));
   l->time_font = fonts_get_system_font(FONT_KEY_LECO_42_NUMBERS);
-  l->line1_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD);
-  l->line2_font = fonts_get_system_font(large ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD);
+  l->line1_font = fonts_get_system_font(
+      large ? (big_bar ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD)
+            : (big_bar ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD));
+  l->line2_font = fonts_get_system_font(
+      large ? (big_bar ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD)
+            : (big_bar ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD));
   // In the date line on round screens, so it matches the date there.
   l->temp_font = l->round ? l->date_font
-                          : fonts_get_system_font(large ? FONT_KEY_GOTHIC_18_BOLD
-                                                        : FONT_KEY_GOTHIC_14_BOLD);
+                          : fonts_get_system_font(
+                                large ? (big_row ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD)
+                                      : (big_row ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD));
   s_layout = *l;
 }
 
+// What's drawn this time round, after fit_layout.
+typedef struct {
+  bool row, logo;
+} Shown;
+
 // Quick view (the timeline peek) covers the bottom of the screen. While it's
-// up, the time and game bar move up by the covered height so both stay in
-// view, and the logo, which no longer fits between the date and the time, is
-// hidden. The same on every watch. Returns whether the logo is shown.
-static bool fit_layout(GRect full, GRect visible) {
+// up, by default the time and game bar move up by the covered height so both
+// stay in view, and the logo, which no longer fits between the date and the
+// time, is hidden. With "keep the logo" chosen in settings, the game bar stays
+// put under the peek, the time moves up only as far as it needs to sit just
+// above it, and the top row makes way so the logo fits above the time. The
+// same on every watch.
+static Shown fit_layout(GRect full, GRect visible) {
   s_layout = s_base;
   int16_t covered = full.size.h - (visible.origin.y + visible.size.h);
-  if (covered <= 0) return true;
+  if (covered <= 0) return (Shown){ .row = true, .logo = true };
+  if (s_game.quick_view == QV_KEEP_LOGO) {
+    // The time's box ends just above the bar, so it moves up by however much
+    // of the bar's spot is covered.
+    int16_t up = s_base.bar_y - (full.size.h - covered);
+    if (up > 0) s_layout.time.origin.y -= up;
+    // The logo's box keeps the same overlap with the time's box as normal.
+    int16_t bottom = s_layout.time.origin.y +
+                     (s_base.logo.origin.y + s_base.logo.size.h - s_base.time.origin.y);
+    s_layout.logo.origin.y = QV_LOGO_TOP;
+    s_layout.logo.size.h = bottom - QV_LOGO_TOP;
+    return (Shown){ .row = false, .logo = true };
+  }
   s_layout.time.origin.y -= covered;
   s_layout.bar_y -= covered;
   s_layout.line1.origin.y -= covered;
   s_layout.line2.origin.y -= covered;
-  return false;
+  return (Shown){ .row = true, .logo = false };
 }
 
 // ---------------------------------------------------------------------------
@@ -363,6 +446,7 @@ static bool split_view(void) {
 // the game in split view.
 static void load_logos(void) {
   destroy_logo(&s_logo);
+  destroy_logo(&s_small_logo);
   destroy_logo(&s_away_logo);
   destroy_logo(&s_home_logo);
   if (!split_view()) {
@@ -371,6 +455,15 @@ static void load_logos(void) {
     s_away_logo = create_logo(s_game.away, true);
     s_home_logo = create_logo(s_game.home, true);
   }
+}
+
+// The selected team's logo for a box: the big one, or the smaller one (loaded
+// the first time it's needed) when the big one is too tall, as with larger
+// text.
+static GBitmap *team_logo(GRect box) {
+  if (!s_logo || gbitmap_get_bounds(s_logo).size.h <= box.size.h + LOGO_SLACK) return s_logo;
+  if (!s_small_logo) s_small_logo = create_logo(view_team(), true);
+  return s_small_logo ? s_small_logo : s_logo;
 }
 
 // Draw bmp centered on (cx, center of box), or the team's name if it has no
@@ -796,8 +889,11 @@ static void draw_weather(GContext *ctx, int16_t x, int16_t w, const char *temp, 
 // no space.
 typedef struct {
   char date[16], temp[8];
+  char percent[6];  // battery, "80%"
+  char uv_text[8];  // "UV 7"
   const char *steps, *heart;  // "" when not available or not in the row
   bool battery, bluetooth, weather;
+  bool uv;     // the UV index is shown (fresh, and high or set to always show)
   bool quiet;  // Quiet Time is on
   uint8_t zones[NUM_ZONES];  // ITEM_* in each zone this time round
   // Read once per redraw and shared by everything in the row.
@@ -996,12 +1092,49 @@ static int16_t bluetooth_h(void) { return s_layout.battery.h + 2; }
 static int16_t bluetooth_w(void) { return bluetooth_h() / 2 + 1; }
 static int16_t quiet_size(void) { return bluetooth_h(); }
 
+static bool battery_icon_shown(void) { return s_game.battery_text != BATT_PERCENT; }
+static bool battery_percent_shown(void) { return s_game.battery_text != BATT_ICON; }
+
+// Width of the battery: the icon and the percentage, whichever are on.
+static int16_t battery_width(const Row *r) {
+  const Layout *l = &s_layout;
+  int16_t w = battery_icon_shown() ? l->battery.w : 0;
+  if (battery_percent_shown()) w += (w ? ICON_GAP : 0) + text_width(r->percent, l->temp_font);
+  return w;
+}
+
+// The battery with its left edge at x, w wide (from battery_width).
+static void draw_battery_item(GContext *ctx, const Row *r, int16_t x, int16_t w, GColor fg) {
+  const Layout *l = &s_layout;
+  if (battery_icon_shown()) {
+    draw_battery(ctx, GRect(x, l->row_cy - l->battery.h / 2, l->battery.w, l->battery.h),
+                 r->charge, fg);
+    x += l->battery.w + ICON_GAP;
+    w -= l->battery.w + ICON_GAP;
+  }
+  if (!battery_percent_shown()) return;
+  graphics_context_set_text_color(ctx, fg);
+  graphics_draw_text(ctx, r->percent, l->temp_font, GRect(x, l->temp_y, w + 4, l->date.size.h),
+                     GTextOverflowModeFill, GTextAlignmentLeft, NULL);
+}
+
+// The UV index from the weather, while the weather is fresh.
+static bool uv_known(void) {
+  return s_game.uv >= 0 && s_game.weather_time &&
+         clock_now() - s_game.weather_time < WEATHER_STALE;
+}
+
+static bool uv_high(void) {
+  return uv_known() && s_game.uv >= s_game.uv_high;
+}
+
 static int16_t item_width(const Row *r, uint8_t item) {
   const Layout *l = &s_layout;
   switch (item) {
     case ITEM_DATE: return text_width(r->date, l->date_font);
     case ITEM_WEATHER: return r->weather ? weather_width(r->temp) : 0;
-    case ITEM_BATTERY: return r->battery ? l->battery.w : 0;
+    case ITEM_BATTERY: return r->battery ? battery_width(r) : 0;
+    case ITEM_UV: return r->uv ? text_width(r->uv_text, l->temp_font) : 0;
     case ITEM_BLUETOOTH: return r->bluetooth ? bluetooth_w() : 0;
     case ITEM_STATUS: {
       int16_t bat = item_width(r, ITEM_BATTERY), bt = item_width(r, ITEM_BLUETOOTH);
@@ -1030,9 +1163,13 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int1
       if (r->weather) draw_weather(ctx, x, w, r->temp, fg, bg);
       break;
     case ITEM_BATTERY:
-      if (r->battery) {
-        draw_battery(ctx, GRect(x, l->row_cy - l->battery.h / 2, l->battery.w, l->battery.h),
-                     r->charge, fg);
+      if (r->battery) draw_battery_item(ctx, r, x, w, fg);
+      break;
+    case ITEM_UV:
+      if (r->uv) {
+        graphics_context_set_text_color(ctx, fg);
+        graphics_draw_text(ctx, r->uv_text, l->temp_font, GRect(x, l->temp_y, w + 4, l->date.size.h),
+                           GTextOverflowModeFill, GTextAlignmentLeft, NULL);
       }
       break;
     case ITEM_BLUETOOTH:
@@ -1041,11 +1178,13 @@ static void draw_item(GContext *ctx, const Row *r, uint8_t item, int16_t x, int1
                        r->connected, fg);
       }
       break;
-    case ITEM_STATUS:  // battery and Bluetooth have fixed sizes, so no width needed
-      draw_item(ctx, r, ITEM_BATTERY, x, 0, fg, bg);
-      if (r->battery) x += l->battery.w + STATUS_GAP;
+    case ITEM_STATUS: {  // Bluetooth has a fixed size, so it needs no width
+      int16_t bat = item_width(r, ITEM_BATTERY);
+      draw_item(ctx, r, ITEM_BATTERY, x, bat, fg, bg);
+      if (bat) x += bat + STATUS_GAP;
       draw_item(ctx, r, ITEM_BLUETOOTH, x, 0, fg, bg);
       break;
+    }
     case ITEM_STEPS:
       if (r->steps[0]) draw_health(ctx, item, x, w, r->steps, fg);
       break;
@@ -1121,9 +1260,9 @@ static void take_zone(Row *r, uint8_t item, uint8_t zone, bool taken[]) {
 
 // Spots that change with what's going on, as chosen in settings, in order of
 // importance: Bluetooth while the phone is disconnected, the battery while
-// it's low, heart rate while the selected team's game is live, and Quiet Time
-// while it's on. Each only takes its spot when it isn't already showing in
-// another one.
+// it's low, heart rate while the selected team's game is live, the UV index
+// while it's high, and Quiet Time while it's on. Each only takes its spot when
+// it isn't already showing in another one.
 static void swap_zones(Row *r) {
   bool taken[NUM_ZONES] = { false };
   if (s_game.bt_zone && !r->connected) {
@@ -1142,6 +1281,10 @@ static void swap_zones(Row *r) {
       !item_in_row(r, ITEM_HEART_RATE)) {
     r->heart = heart_text();
     if (r->heart[0]) take_zone(r, ITEM_HEART_RATE, s_game.live_hr_zone, taken);
+  }
+  if (s_game.uv_zone && uv_high() && !item_in_row(r, ITEM_UV)) {
+    r->uv = true;
+    take_zone(r, ITEM_UV, s_game.uv_zone, taken);
   }
   if (s_game.quiet_zone && r->quiet && !item_in_row(r, ITEM_QUIET)) {
     take_zone(r, ITEM_QUIET, s_game.quiet_zone, taken);
@@ -1163,6 +1306,9 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
   if (row.weather) {
     snprintf(row.temp, sizeof(row.temp), "%d\xc2\xb0", s_game.temp);  // degree sign in UTF-8
   }
+  snprintf(row.percent, sizeof(row.percent), "%d%%", row.charge.charge_percent);
+  row.uv = uv_known() && (s_game.uv_show == UV_ALWAYS || uv_high());
+  if (uv_known()) snprintf(row.uv_text, sizeof(row.uv_text), "UV %d", s_game.uv);
   memcpy(row.zones, s_game.zones, sizeof(row.zones));
   swap_zones(&row);
   // Health is only read when it's in the row.
@@ -1185,7 +1331,7 @@ static void draw_row(GContext *ctx, const struct tm *t, int16_t w, GColor fg, GC
 
 static void canvas_update(Layer *layer, GContext *ctx) {
   GRect b = layer_get_bounds(layer);
-  bool logo_shown = fit_layout(b, layer_get_unobstructed_bounds(layer));
+  Shown shown = fit_layout(b, layer_get_unobstructed_bounds(layer));
   const Layout *l = &s_layout;
   bool matchup = split_view();
   int16_t cx = b.size.w / 2;
@@ -1215,7 +1361,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   // Top row: date, weather, battery and Bluetooth, wherever settings put them.
   time_t now = clock_now();
   struct tm *t = localtime(&now);
-  draw_row(ctx, t, b.size.w, fg, left_bg, right_bg);
+  if (shown.row) draw_row(ctx, t, b.size.w, fg, left_bg, right_bg);
 
   // Time
   char clock[8];
@@ -1224,7 +1370,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   draw_clock(ctx, clock_text, t->tm_sec, fg);
 
   // Logos
-  if (!logo_shown) {
+  if (!shown.logo) {
     // hidden under quick view
   } else if (matchup && (s_game.away[0] || s_game.home[0])) {
     draw_logo(ctx, s_away_logo, s_game.away, cx - l->half_dx,
@@ -1232,7 +1378,7 @@ static void canvas_update(Layer *layer, GContext *ctx) {
     draw_logo(ctx, s_home_logo, s_game.home, cx + l->half_dx,
               GRect(0, l->logo.origin.y, l->half_dx * 2, l->logo.size.h), fg);
   } else {
-    draw_logo(ctx, s_logo, view_team(), cx, l->logo, fg);
+    draw_logo(ctx, team_logo(l->logo), view_team(), cx, l->logo, fg);
   }
 
   // Game bar
@@ -1285,7 +1431,8 @@ static Game default_game(void) {
   return (Game){ .away_score = -1, .home_score = -1,
                  .zones = { ITEM_WEATHER, ITEM_DATE, ITEM_STATUS },
                  .battery_low = BATTERY_LOW_PERCENT,
-                 .battery_critical = BATTERY_CRITICAL_PERCENT };
+                 .battery_critical = BATTERY_CRITICAL_PERCENT,
+                 .uv = -1, .uv_high = UV_HIGH_DEFAULT };
 }
 
 #ifndef MASL_DEMO
@@ -1433,6 +1580,14 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_QuietTimeZone, &n)) s_game.quiet_zone = n;
   if (read_int(it, MESSAGE_KEY_BatteryLow, &n)) s_game.battery_low = n;
   if (read_int(it, MESSAGE_KEY_BatteryCritical, &n)) s_game.battery_critical = n;
+  if (read_int(it, MESSAGE_KEY_LargeBar, &n)) s_game.large_bar = n;
+  if (read_int(it, MESSAGE_KEY_LargeRow, &n)) s_game.large_row = n;
+  if (read_int(it, MESSAGE_KEY_BatteryText, &n)) s_game.battery_text = n;
+  if (read_int(it, MESSAGE_KEY_UVShow, &n)) s_game.uv_show = n;
+  if (read_int(it, MESSAGE_KEY_UVHigh, &n)) s_game.uv_high = n;
+  if (read_int(it, MESSAGE_KEY_UVZone, &n)) s_game.uv_zone = n;
+  if (read_int(it, MESSAGE_KEY_QuickView, &n)) s_game.quick_view = n;
+  if (read_int(it, MESSAGE_KEY_UV, &n)) s_game.uv = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
     s_game.weather_time = time(NULL);
@@ -1452,6 +1607,9 @@ static void inbox_received(DictionaryIterator *it, void *context) {
       strcmp(old.home, s_game.home) != 0 || old.split != s_game.split ||
       old.league != s_game.league) {
     load_logos();
+  }
+  if (old.large_bar != s_game.large_bar || old.large_row != s_game.large_row) {
+    set_layout(layer_get_bounds(window_get_root_layer(s_window)));
   }
   save_game();
   update_flick_service();
@@ -1599,6 +1757,7 @@ static void deinit(void) {
   connection_service_unsubscribe();
   window_destroy(s_window);
   destroy_logo(&s_logo);
+  destroy_logo(&s_small_logo);
   destroy_logo(&s_away_logo);
   destroy_logo(&s_home_logo);
 }

@@ -51,7 +51,8 @@ function zoneSelect(key, label, value) {
       { label: 'Battery and Bluetooth', value: 'status' },
       { label: 'Steps today', value: 'steps' },
       { label: 'Heart rate', value: 'heartRate' },
-      { label: 'Quiet Time bell', value: 'quiet' }
+      { label: 'Quiet Time bell', value: 'quiet' },
+      { label: 'UV index', value: 'uv' }
     ]
   };
 }
@@ -202,6 +203,32 @@ module.exports = [
         description: 'Shows seconds for a few seconds after a wrist flick, then hides them. ' +
                      'Saves most of the battery cost. (A watchface cannot see button presses.)',
         defaultValue: false
+      },
+      {
+        type: 'toggle',
+        messageKey: 'LargeRow',
+        label: 'Larger top row text',
+        description: 'The row fills up sooner, so the date drops a word more often.',
+        defaultValue: false
+      },
+      {
+        type: 'toggle',
+        messageKey: 'LargeBar',
+        label: 'Larger game bar text',
+        description: 'The bar grows a little taller and the time moves up. ' +
+                     'A tall logo may switch to its smaller version to make room.',
+        defaultValue: false
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'QuickView',
+        label: 'When Quick View covers the bottom',
+        defaultValue: 'slide',
+        options: [
+          { label: 'Move the time and game bar up (hides the logo)', value: 'slide' },
+          { label: 'Keep the logo and move the time up (hides the top row and game bar)',
+            value: 'logo' }
+        ]
       }
     ]
   },
@@ -274,6 +301,29 @@ module.exports = [
         ]
       },
       {
+        type: 'radiogroup',
+        messageKey: 'UVShow',
+        label: 'Show UV index',
+        description: "From the weather where your phone is, every 30 minutes.",
+        defaultValue: 'high',
+        options: [
+          { label: 'Only when high', value: 'high' },
+          { label: 'Always', value: 'always' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'UVHigh',
+        label: 'UV index is high at',
+        defaultValue: '6',
+        options: [
+          { label: '3 or more (moderate)', value: '3' },
+          { label: '6 or more (high)', value: '6' },
+          { label: '8 or more (very high)', value: '8' },
+          { label: '11 or more (extreme)', value: '11' }
+        ]
+      },
+      {
         type: 'select',
         messageKey: 'Battery',
         label: 'Show battery',
@@ -282,6 +332,17 @@ module.exports = [
           { label: 'Always', value: 'always' },
           { label: 'When low or charging', value: 'low' },
           { label: 'Never', value: 'never' }
+        ]
+      },
+      {
+        type: 'select',
+        messageKey: 'BatteryText',
+        label: 'Battery shows',
+        defaultValue: 'icon',
+        options: [
+          { label: 'Icon', value: 'icon' },
+          { label: 'Percentage (80%)', value: 'percent' },
+          { label: 'Icon and percentage', value: 'both' }
         ]
       },
       percentSelect('BatteryLow', 'Battery is low at', 'Yellow on color watches.',
@@ -324,6 +385,7 @@ module.exports = [
       swapSelect('LowBatteryZone', 'Battery gets low'),
       swapSelect('DisconnectedZone', 'Phone disconnects'),
       swapSelect('QuietTimeZone', 'Quiet Time turns on'),
+      swapSelect('UVZone', 'UV index gets high'),
       swapSelect('LiveHeartRateZone', "My team's game is live (heart rate)")
     ]
   },
