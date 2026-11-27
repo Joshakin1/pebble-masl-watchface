@@ -1385,6 +1385,12 @@ static void canvas_update(Layer *layer, GContext *ctx) {
   char line1[32], line2[32];
   format_lines(line1, sizeof(line1), line2, sizeof(line2));
   GColor bar_text = text_on(bar);
+  // "LIVE - 2nd 10:12" can run wide on the smaller screens. The clock says
+  // the game is live on its own, so drop "LIVE - " rather than cut it off.
+  if (s_game.state == STATE_LIVE && s_game.detail[0] &&
+      text_width(line1, l->line1_font) > l->line1.size.w) {
+    snprintf(line1, sizeof(line1), "%s", s_game.detail);
+  }
   draw_text(ctx, line1, l->line1_font, l->line1, bar_text);
   draw_text(ctx, line2, l->line2_font, l->line2, bar_text);
 }
