@@ -13,6 +13,8 @@
 var TEAMS = require('./teams');
 
 var TICKER_URL = 'https://web.api.digitalshift.ca/partials/score-ticker';
+// One game's page, which has the game clock the ticker leaves out.
+var GAME_URL = 'https://web.api.digitalshift.ca/partials/stats/game?game_id=';
 // Public site token embedded in maslsoccer.com. If the face starts showing
 // "Error 401/403", grab a fresh ticket from DevTools and paste it here.
 var TICKET = 'sBo7AT5RH6DLyYeFtGiJvpXa_JsGl9LIj8dSnDZTEwj5gPgukowAIc9Swg-t9T6dgm0IUwtnCacatO0TAb05PNqb';
@@ -197,6 +199,7 @@ function parseTicker(html) {
     var away = parseTeam(teamChunks[0]);
     var home = parseTeam(teamChunks[1]);
 
+    var idMatch = c.match(/data-game-id="(\d+)"/);
     var statusMatch = c.match(/<div class="status[^"]*"[^>]*>([\s\S]*?)<\/div>/);
     var status = statusMatch ? stripTags(statusMatch[1]) : '';
     var scheduled = /^\d{1,2}:\d{2}\s*[ap]m/i.test(status);
@@ -205,6 +208,7 @@ function parseTicker(html) {
     games.push({
       away: away.name, awayScore: away.score,
       home: home.name, homeScore: home.score,
+      id: idMatch ? idMatch[1] : '',
       status: status,
       state: scheduled ? SCHEDULED : isFinal ? FINAL : status ? LIVE : NONE,
       start: startTime(label)
@@ -357,11 +361,57 @@ function gameMessage(game, s, now, league) {
   return msg;
 }
 
+// The game clock from a game's page, as "10:12" left in the period (the way
+// the arena's clock counts down), "End" once the period's time has run out,
+// or '' if the page has none. The page gives the seconds gone in the period
+// when the clock last started or stopped, and whether it's running; a
+// running clock is carried forward to `now`. It's only right as of the last
+// refresh: stoppages after that aren't seen.
+function parseClock(html, now) {
+  var m = html.match(/data-game-clock="([^"]*)"[^>]*?data-period-lengths="([^"]*)"(?:[^>]*?data-overtime-length="(\d+)")?/);
+  if (!m) return '';
+  var clock;
+  try {
+    clock = JSON.parse(decodeEntities(m[1]));
+  } catch (e) {
+    return '';
+  }
+  var period = +clock.period || 0, gone = parseFloat(clock.time);
+  if (!period || isNaN(gone)) return '';
+  if (clock.running && clock.started_at) {
+    // "2026-11-27 23:38:15 +0000"
+    var t = clock.started_at.match(/^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) ([+-])(\d\d)(\d\d)/);
+    if (t) {
+      var offset = (t[7] === '-' ? -1 : 1) * (+t[8] * 60 + +t[9]) * 60000;
+      var started = Date.UTC(+t[1], +t[2] - 1, +t[3], +t[4], +t[5], +t[6]) - offset;
+      gone += Math.max(0, (now - started) / 1000);
+    }
+  }
+  var lengths = m[2].split(',');
+  var mins = period <= lengths.length ? +lengths[period - 1] : +m[3];
+  if (!mins) return '';
+  var left = Math.ceil(mins * 60 - gone);
+  if (left <= 0) return 'End';
+  return Math.floor(left / 60) + ':' + (left % 60 < 10 ? '0' : '') + left % 60;
+}
+
+// "2nd" from the ticker plus the clock: "2nd 10:12", or "End 2nd". Anything
+// that isn't a plain period (halftime, a shootout) stays as the ticker has it.
+function liveDetail(status, clock) {
+  if (!clock || !/^(\d(st|nd|rd|th)|OT\d*)$/i.test(status)) return status;
+  return clock === 'End' ? 'End ' + status : status + ' ' + clock;
+}
+
 // GET the ticker and pass its HTML content to onContent, or a short error
 // message for the watch to onError.
 function getTicker(onContent, onError) {
+  getPartial(TICKER_URL, onContent, onError);
+}
+
+// GET one of the site's partials (JSON wrapping HTML).
+function getPartial(url, onContent, onError) {
   var xhr = new XMLHttpRequest();
-  xhr.open('GET', TICKER_URL, true);
+  xhr.open('GET', url, true);
   xhr.setRequestHeader('Accept', 'application/json, text/plain, */*');
   xhr.setRequestHeader('Authorization', 'ticket="' + TICKET + '"');
   // Some environments ignore these; harmless if so.
@@ -380,7 +430,7 @@ function getTicker(onContent, onError) {
     try {
       content = JSON.parse(xhr.responseText).content || '';
     } catch (e) {
-      console.log('Bad ticker response: ' + e);
+      console.log('Bad response from ' + url + ': ' + e);
       onError('Could not read data');
       return;
     }
@@ -491,7 +541,28 @@ function fetchGame() {
       send({ Status: 'Could not read scores', Refresh: ERROR_REFRESH });
       return;
     }
-    send(gameMessage(game.game, s, now, game.league));
+    var g = game.game;
+    if (!g || g.state !== LIVE || !g.id) {
+      send(gameMessage(g, s, now, game.league));
+      return;
+    }
+    // Live: add the game clock from the game's own page, or go without it.
+    var done = function (clock) {
+      g.status = liveDetail(g.status, clock);
+      send(gameMessage(g, s, Date.now(), game.league));
+    };
+    getPartial(GAME_URL + g.id, function (page) {
+      var clock = '';
+      try {
+        clock = parseClock(page, Date.now());
+      } catch (e) {
+        console.log('Clock parse error: ' + e);
+      }
+      done(clock);
+    }, function (message) {
+      console.log('No game clock: ' + message);
+      done('');
+    });
   }, function (message) {
     // Keep whatever game the watch already has; the status only shows when
     // it has none.
@@ -591,5 +662,6 @@ if (typeof Pebble !== 'undefined') {
 if (typeof module !== 'undefined' && typeof Pebble === 'undefined') {
   module.exports = { parseTicker: parseTicker, pickGame: pickGame, pickShown: pickShown,
                      gameMessage: gameMessage, refreshDelay: refreshDelay,
-                     weatherIcon: weatherIcon, DEFAULTS: DEFAULTS };
+                     weatherIcon: weatherIcon, parseClock: parseClock,
+                     liveDetail: liveDetail, DEFAULTS: DEFAULTS };
 }
