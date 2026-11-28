@@ -11,6 +11,7 @@
 // half hour.
 
 var TEAMS = require('./teams');
+var TIME_FONTS = require('./time-fonts');
 
 var TICKER_URL = 'https://web.api.digitalshift.ca/partials/score-ticker';
 // One game's page, which has the game clock the ticker leaves out.
@@ -60,7 +61,8 @@ var DEFAULTS = {
   lowBatteryZone: 'off', disconnectedZone: 'off', quietTimeZone: 'off',
   batteryLow: 40, batteryCritical: 20, batteryText: 'icon',
   uvShow: 'high', uvHigh: 6, uvZone: 'off',
-  largeBar: false, largeRow: false, quickView: 'slide'
+  largeBar: false, largeRow: false, quickView: 'slide',
+  timeFont: 'leco', timeSizes: {}
 };
 
 // A spot that switches when something matters, as sent to the watch: 0 for
@@ -287,6 +289,22 @@ function gameDelay(game, s, now) {
   return mins <= 0 ? LIVE_NO_SCORES : Math.min(IDLE_REFRESH, mins);
 }
 
+function timeFontIndex(value) {
+  for (var i = 0; i < TIME_FONTS.length; i++) {
+    if (TIME_FONTS[i].value === value) return i;
+  }
+  return -1;
+}
+
+// The time's size for the chosen font, or 0 for its largest (all a style
+// with one size has).
+function timeSize(s) {
+  var f = TIME_FONTS[timeFontIndex(s.timeFont)];
+  if (!f || !f.sizeKey) return 0;
+  var size = +(s.timeSizes || {})[f.sizeKey];
+  return f.sizes.indexOf(size) !== -1 ? size : 0;
+}
+
 // The settings that only change how the watch draws. The watch numbers its
 // options in the order they're listed here.
 function displayMessage(s) {
@@ -324,7 +342,9 @@ function displayMessage(s) {
            UVZone: swapZone(s.uvZone),
            LargeBar: s.largeBar ? 1 : 0,
            LargeRow: s.largeRow ? 1 : 0,
-           QuickView: s.quickView === 'logo' ? 1 : 0 };
+           QuickView: s.quickView === 'logo' ? 1 : 0,
+           TimeFont: Math.max(0, timeFontIndex(s.timeFont)),
+           TimeSize: timeSize(s) };
 }
 
 // Clay hands back colors as a number, but accept "#00AAAA" or "0x00AAAA" too.
@@ -644,8 +664,13 @@ if (typeof Pebble !== 'undefined') {
       uvZone: v('UVZone', DEFAULTS.uvZone),
       largeBar: !!v('LargeBar', DEFAULTS.largeBar),
       largeRow: !!v('LargeRow', DEFAULTS.largeRow),
-      quickView: v('QuickView', DEFAULTS.quickView)
+      quickView: v('QuickView', DEFAULTS.quickView),
+      timeFont: v('TimeFont', DEFAULTS.timeFont),
+      timeSizes: {}
     };
+    TIME_FONTS.forEach(function (f) {
+      if (f.sizeKey) s.timeSizes[f.sizeKey] = +v(f.sizeKey, f.sizes[0]);
+    });
     var old = loadSettings();
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
     // Switch the theme right away; the game follows once the fetch is back.

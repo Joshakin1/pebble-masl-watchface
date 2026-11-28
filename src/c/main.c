@@ -27,7 +27,7 @@
 #define PERSIST_KEY_VERSION 1
 #define PERSIST_KEY_GAME 2
 // Bump when Game changes shape so an old saved copy is ignored.
-#define PERSIST_VERSION 14
+#define PERSIST_VERSION 15
 
 // Minutes before asking the phone again when it hasn't said.
 #define DEFAULT_REFRESH 30
@@ -88,6 +88,35 @@ enum { WX_NONE, WX_SUN, WX_MOON, WX_PARTLY_SUN, WX_PARTLY_MOON, WX_CLOUD, WX_FOG
 // are from the LECO fonts' line boxes; adjust here if they look off.
 #define SECONDS_GAP 2
 #define SECONDS_DY 21
+
+// The time's font styles, picked in settings. Keep in sync with
+// src/pkjs/time-fonts.js.
+enum { TF_LECO, TF_LECO_BOLD, TF_BITHAM, TF_ROBOTO };
+
+// The time's fonts: each style's sizes, largest first. `top` and `bottom` are
+// where the digits start and end, in pixels down from the top of the font's
+// line box. The layout is tuned to the first one (the default), and the time
+// moves so every font's digits end where its do. Only the default's numbers
+// are measured; the others are estimates, so adjust them if the time sits
+// too high or low with that font.
+typedef struct {
+  uint8_t style;  // TF_*
+  uint8_t size;   // as listed in settings
+  const char *key;
+  int8_t top, bottom;
+} TimeFont;
+
+static const TimeFont s_time_fonts[] = {
+  { TF_LECO, 42, FONT_KEY_LECO_42_NUMBERS, 10, 41 },
+  { TF_LECO, 28, FONT_KEY_LECO_28_LIGHT_NUMBERS, 7, 27 },
+  { TF_LECO_BOLD, 38, FONT_KEY_LECO_38_BOLD_NUMBERS, 9, 37 },
+  { TF_LECO_BOLD, 36, FONT_KEY_LECO_36_BOLD_NUMBERS, 9, 35 },
+  { TF_LECO_BOLD, 32, FONT_KEY_LECO_32_BOLD_NUMBERS, 8, 31 },
+  { TF_BITHAM, 42, FONT_KEY_BITHAM_42_MEDIUM_NUMBERS, 11, 41 },
+  { TF_BITHAM, 34, FONT_KEY_BITHAM_34_MEDIUM_NUMBERS, 9, 33 },
+  { TF_ROBOTO, 49, FONT_KEY_ROBOTO_BOLD_SUBSET_49, 11, 46 },
+};
+#define NUM_TIME_FONTS ((int)ARRAY_LENGTH(s_time_fonts))
 
 // Default battery levels, at or below: low (shown in yellow, shown at all with
 // the "when low" setting, and switching a spot to the battery) and critical
@@ -160,6 +189,8 @@ typedef struct {
   uint8_t uv_high;           // UV index at or above which it counts as high
   uint8_t uv_zone;           // 0 for off, or 1 + the ZONE_* that shows UV while it's high
   uint8_t quick_view;        // QV_*
+  uint8_t time_font;         // TF_*
+  uint8_t time_size;         // a size of that style from s_time_fonts, 0 for its largest
 } Game;
 
 typedef struct {
@@ -204,6 +235,7 @@ typedef struct {
   int16_t row_cy;   // middle of the icons in the top row
   int16_t wx_size;  // weather icon's width and height
   int16_t temp_y;   // top of the temperature's text box
+  int16_t secs_dy;  // seconds' offset from the time's box top
   GFont date_font, time_font, line1_font, line2_font, temp_font;
 } Layout;
 
@@ -310,6 +342,43 @@ static GColor text_on(GColor bg) {
 #endif
 }
 
+static int16_t text_width(const char *text, GFont font);
+
+// How wide the time is in font f, with seconds after it if they can show at
+// all. Measured with the widest digits so the font doesn't change from
+// minute to minute.
+static int16_t time_width(const TimeFont *f) {
+  int16_t need = text_width("00:00", fonts_get_system_font(f->key));
+  if (s_game.seconds != SECONDS_OFF) {
+    need += SECONDS_GAP + text_width("00", fonts_get_system_font(FONT_KEY_LECO_20_BOLD_NUMBERS));
+  }
+  return need;
+}
+
+// Whether the time fits across the screen in font f. Anything no wider than
+// the default font counts as fitting, since the layout is made for that.
+static bool time_font_fits(const TimeFont *f, int16_t w) {
+  int16_t need = time_width(f);
+  return need <= w - 4 || need <= time_width(&s_time_fonts[0]);
+}
+
+// The time's font from settings, or the next size down in the same style
+// when it's too wide for this screen.
+static const TimeFont *pick_time_font(int16_t w) {
+  int start = -1, last = -1;
+  for (int i = 0; i < NUM_TIME_FONTS; i++) {
+    if (s_time_fonts[i].style != s_game.time_font) continue;
+    if (start < 0 && (!s_game.time_size || s_time_fonts[i].size <= s_game.time_size)) start = i;
+    last = i;
+  }
+  if (last < 0) return &s_time_fonts[0];  // a style this version doesn't know
+  if (start < 0) start = last;
+  for (int i = start; i < last; i++) {
+    if (time_font_fits(&s_time_fonts[i], w)) return &s_time_fonts[i];
+  }
+  return &s_time_fonts[last];
+}
+
 static void set_layout(GRect b) {
   int w = b.size.w;
   Layout *l = &s_base;
@@ -366,11 +435,21 @@ static void set_layout(GRect b) {
     l->logo.size.h -= grow;
   }
 
+  // The time's font. Its box moves so the digits end where the default
+  // font's do, just above the bar, and the logo's box shrinks by however much
+  // taller the digits are (or grows for shorter ones).
+  const TimeFont *tf = pick_time_font(w);
+  const TimeFont *base = &s_time_fonts[0];
+  l->time.origin.y += base->bottom - tf->bottom;
+  if (tf->bottom + 4 > l->time.size.h) l->time.size.h = tf->bottom + 4;
+  l->logo.size.h -= (tf->bottom - tf->top) - (base->bottom - base->top);
+  l->secs_dy = SECONDS_DY + tf->bottom - base->bottom;
+  l->time_font = fonts_get_system_font(tf->key);
+
   bool big_row = s_game.large_row, big_bar = s_game.large_bar;
   l->date_font = fonts_get_system_font(
       large ? (big_row ? FONT_KEY_GOTHIC_28_BOLD : FONT_KEY_GOTHIC_24_BOLD)
             : (big_row ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD));
-  l->time_font = fonts_get_system_font(FONT_KEY_LECO_42_NUMBERS);
   l->line1_font = fonts_get_system_font(
       large ? (big_bar ? FONT_KEY_GOTHIC_24_BOLD : FONT_KEY_GOTHIC_18_BOLD)
             : (big_bar ? FONT_KEY_GOTHIC_18_BOLD : FONT_KEY_GOTHIC_14_BOLD));
@@ -649,7 +728,7 @@ static void draw_clock(GContext *ctx, const char *clock, int sec, GColor fg) {
                      GRect(x, l->time.origin.y, big_size.w + 4, l->time.size.h),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
   graphics_draw_text(ctx, secs, small,
-                     GRect(x + big_size.w + SECONDS_GAP, l->time.origin.y + SECONDS_DY,
+                     GRect(x + big_size.w + SECONDS_GAP, l->time.origin.y + l->secs_dy,
                            small_size.w + 4, 26),
                      GTextOverflowModeFill, GTextAlignmentLeft, NULL);
 }
@@ -1536,6 +1615,8 @@ static void demo_scene(int scene) {
       break;
   }
   s_game = g;
+  // Seconds can change which time font fits.
+  if (s_window) set_layout(layer_get_bounds(window_get_root_layer(s_window)));
   load_logos();
   update_tick_unit();
   if (s_canvas) layer_mark_dirty(s_canvas);
@@ -1596,6 +1677,8 @@ static void inbox_received(DictionaryIterator *it, void *context) {
   if (read_int(it, MESSAGE_KEY_UVHigh, &n)) s_game.uv_high = n;
   if (read_int(it, MESSAGE_KEY_UVZone, &n)) s_game.uv_zone = n;
   if (read_int(it, MESSAGE_KEY_QuickView, &n)) s_game.quick_view = n;
+  if (read_int(it, MESSAGE_KEY_TimeFont, &n)) s_game.time_font = n;
+  if (read_int(it, MESSAGE_KEY_TimeSize, &n)) s_game.time_size = n;
   if (read_int(it, MESSAGE_KEY_UV, &n)) s_game.uv = n;
   if (read_int(it, MESSAGE_KEY_Temp, &n)) {
     s_game.temp = n;
@@ -1617,7 +1700,10 @@ static void inbox_received(DictionaryIterator *it, void *context) {
       old.league != s_game.league) {
     load_logos();
   }
-  if (old.large_bar != s_game.large_bar || old.large_row != s_game.large_row) {
+  // The time's font can change with seconds, which need room beside it.
+  if (old.large_bar != s_game.large_bar || old.large_row != s_game.large_row ||
+      old.time_font != s_game.time_font || old.time_size != s_game.time_size ||
+      old.seconds != s_game.seconds) {
     set_layout(layer_get_bounds(window_get_root_layer(s_window)));
   }
   save_game();

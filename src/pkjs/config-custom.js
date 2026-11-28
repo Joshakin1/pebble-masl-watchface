@@ -33,6 +33,12 @@ module.exports = function () {
       show('GameClock', get('Mode') !== 'countdown');
       show('SecondsBacklight', !!get('Seconds'));
 
+      // Time font: only the chosen style's sizes. Keep in sync with
+      // time-fonts.js.
+      show('TimeSizeLeco', get('TimeFont') === 'leco');
+      show('TimeSizeLecoBold', get('TimeFont') === 'lecoBold');
+      show('TimeSizeBitham', get('TimeFont') === 'bitham');
+
       // Look: the custom background only replaces the picked team's color.
       show('CustomColor', get('BarColor') === 'custom');
       show('BgColor', team);
@@ -80,7 +86,7 @@ module.exports = function () {
       });
     }
 
-    ['Team', 'Mode', 'Seconds', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
+    ['Team', 'Mode', 'Seconds', 'TimeFont', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
      'DateFormat', 'Weather', 'Battery', 'LowBatteryZone', 'UVShow', 'UVZone', 'ShowScores']
       .forEach(function (key) { var i = item(key); if (i) i.on('change', update); });
     update();
