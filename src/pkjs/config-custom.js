@@ -29,6 +29,8 @@ module.exports = function () {
       show('View', team);
       show('HomeOnly', team);
       show('NoTeamGame', team);
+      show('OtherLive', team);
+      show('OtherLiveWhen', team && get('OtherLive') !== 'off');
       show('CountdownDetail', get('Mode') === 'countdown');
       show('GameClock', get('Mode') !== 'countdown');
       show('SecondsBacklight', !!get('Seconds'));
@@ -86,7 +88,7 @@ module.exports = function () {
       });
     }
 
-    ['Team', 'Mode', 'Seconds', 'TimeFont', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
+    ['Team', 'OtherLive', 'Mode','Seconds', 'TimeFont', 'BarColor', 'BgColor', 'ZoneLeft', 'ZoneMiddle', 'ZoneRight',
      'DateFormat', 'Weather', 'Battery', 'LowBatteryZone', 'UVShow', 'UVZone', 'ShowScores']
       .forEach(function (key) { var i = item(key); if (i) i.on('change', update); });
     update();
