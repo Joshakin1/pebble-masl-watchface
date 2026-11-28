@@ -51,7 +51,8 @@ var DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 var SETTINGS_KEY = 'settings';
 var DEFAULTS = {
-  team: '', view: 'logo', homeOnly: false, noTeamGame: 'status', mode: 'time', timeZone: 'eastern',
+  team: '', view: 'logo', homeOnly: false, noTeamGame: 'status',
+  otherLive: 'off', otherLiveWhen: 'offDay', mode: 'time', timeZone: 'eastern',
   showScores: false, liveInterval: 1, barColor: 'primary', customColor: 0x00AAAA,
   battery: 'always', seconds: false, secondsBacklight: false, countdownDetail: 'hours',
   bgColor: 'team', customBg: 0x000000, weather: 'off', tempUnits: 'f',
@@ -219,14 +220,48 @@ function parseTicker(html) {
   return games;
 }
 
-// The game to show: a live one first, then (with scores on) a final from
-// earlier today if the next game isn't also today, then the next scheduled.
-function pickGame(games, s, now) {
-  var mine = games.filter(function (g) {
+// The games the settings cover: the team's, or every game with no team.
+function teamGames(games, s) {
+  return games.filter(function (g) {
     if (!s.team) return true;
     return g.home === s.team || (!s.homeOnly && g.away === s.team);
   });
-  var live = mine.filter(function (g) { return g.state === LIVE; })[0];
+}
+
+// How far along a live game is, from the ticker's status: the period
+// number, plus half for a break after it ("Halftime" comes after the 2nd).
+// Overtime and shootouts come after everything, since how long they run
+// can't be known. 0 for anything else.
+function liveProgress(status) {
+  var t = (status || '').toLowerCase();
+  if (/(^|[^a-z])ot\d*([^a-z]|$)|overtime|shootout/.test(t)) return 100;
+  if (/half/.test(t)) return 2.5;
+  var m = t.match(/(\d)(st|nd|rd|th)/);
+  if (m) return +m[1] + (/end|break|int/.test(t) ? 0.5 : 0);
+  return 0;
+}
+
+// The live games furthest along, all in the same period: the earliest
+// start first, then the ticker's order. With two games in the same period,
+// only the game clocks can tell which has less time left.
+function liveLeaders(games) {
+  var live = games.filter(function (g) { return g.state === LIVE; }).map(function (g, i) {
+    return { game: g, progress: liveProgress(g.status), i: i };
+  }).sort(function (a, b) {
+    var as = a.game.start ? a.game.start.getTime() : Infinity;
+    var bs = b.game.start ? b.game.start.getTime() : Infinity;
+    return b.progress - a.progress || as - bs || a.i - b.i;
+  });
+  return live.filter(function (l) { return l.progress === live[0].progress; })
+             .map(function (l) { return l.game; });
+}
+
+// The game to show: the live one furthest along first, then (with scores
+// on) a final from earlier today if the next game isn't also today, then
+// the next scheduled.
+function pickGame(games, s, now) {
+  var mine = teamGames(games, s);
+  var live = liveLeaders(mine)[0];
   if (live) return live;
 
   var next = mine.filter(function (g) {
@@ -249,15 +284,54 @@ function pickGame(games, s, now) {
 // The team's game, or with none and the setting on, the league's game
 // instead. `league` says which: 0 for the team's own game (or no team
 // picked), 1 for the league's game with the team's look kept, 2 for the
-// league's game in full league mode.
+// league's game in full league mode. `ties` lists the live games in the
+// same period as a live game picked (itself included), for the game clocks
+// to decide between. Another team's live game can take over (otherLive).
 function pickShown(games, s, now) {
-  var game = pickGame(games, s, now);
-  if (game || !s.team || s.noTeamGame === 'status') return { game: game, league: 0 };
-  var leagueOnly = {};
-  for (var k in s) leagueOnly[k] = s[k];
-  leagueOnly.team = '';
-  game = pickGame(games, leagueOnly, now);
-  return { game: game, league: game ? (s.noTeamGame === 'league' ? 2 : 1) : 0 };
+  var game = pickGame(games, s, now), shown;
+  if (game || !s.team || s.noTeamGame === 'status') {
+    shown = { game: game, league: 0, ties: liveTies(game, games, s) };
+  } else {
+    var leagueOnly = {};
+    for (var k in s) leagueOnly[k] = s[k];
+    leagueOnly.team = '';
+    game = pickGame(games, leagueOnly, now);
+    shown = { game: game, league: game ? (s.noTeamGame === 'league' ? 2 : 1) : 0,
+              ties: liveTies(game, games, leagueOnly) };
+  }
+  return otherLive(games, s, now, shown);
+}
+
+// With the setting on, other teams' live games while the team's own game
+// isn't live: on any day ('notLive'), or only on days the team doesn't play
+// at all ('offDay', counting away games even with home games only on). The
+// one closest to the end shows, in the team's look ('teamLook') or with both
+// teams' logos ('league'). With none live, `wake` is the next game that
+// could take over, so the watch asks again when it starts.
+function otherLive(games, s, now, shown) {
+  if (!s.team || !s.otherLive || s.otherLive === 'off') return shown;
+  if (shown.game && shown.game.state === LIVE && shown.league === 0) return shown;
+  var mine = function (g) { return g.home === s.team || g.away === s.team; };
+  var plays = function (day) {
+    return games.some(function (g) {
+      return mine(g) && g.start && g.start.toDateString() === day.toDateString();
+    });
+  };
+  var allowed = function (g) {
+    return !mine(g) && (s.otherLiveWhen === 'notLive' || !plays(g.start || new Date(now)));
+  };
+  var leaders = liveLeaders(games.filter(allowed));
+  if (leaders.length) {
+    return { game: leaders[0], league: s.otherLive === 'league' ? 2 : 1, ties: leaders };
+  }
+  shown.wake = games.filter(function (g) {
+    return g.state === SCHEDULED && g.start && now - g.start.getTime() < STALE_MS && allowed(g);
+  }).sort(function (a, b) { return a.start.getTime() - b.start.getTime(); })[0] || null;
+  return shown;
+}
+
+function liveTies(game, games, s) {
+  return game && game.state === LIVE ? liveLeaders(teamGames(games, s)) : [];
 }
 
 // Whether the UV index can show: it has a spot, or switches into one.
@@ -272,9 +346,11 @@ function weatherOn(s) {
           [s.zoneLeft, s.zoneMiddle, s.zoneRight].indexOf('weather') !== -1) || uvOn(s);
 }
 
-// Minutes until the watch should ask again.
-function refreshDelay(game, s, now) {
+// Minutes until the watch should ask again: for the game shown, or sooner
+// for `wake`, another game that will take over when it starts.
+function refreshDelay(game, s, now, wake) {
   var delay = gameDelay(game, s, now);
+  if (wake) delay = Math.min(delay, gameDelay(wake, s, now));
   return weatherOn(s) ? Math.min(delay, WEATHER_REFRESH) : delay;
 }
 
@@ -355,8 +431,8 @@ function colorValue(v) {
 // Everything the watch needs for one game, ready for sendAppMessage. Scores
 // are -1 unless the user turned scores on. Display settings are left out:
 // displayMessage sends those.
-function gameMessage(game, s, now, league) {
-  var msg = { Refresh: refreshDelay(game, s, now), Status: '', League: league || 0 };
+function gameMessage(game, s, now, league, wake) {
+  var msg = { Refresh: refreshDelay(game, s, now, wake), Status: '', League: league || 0 };
   if (!game) {
     msg.State = NONE;
     msg.Away = msg.Home = msg.Day = msg.Time = msg.Detail = '';
@@ -388,16 +464,29 @@ function gameMessage(game, s, now, league) {
 // running clock is carried forward to `now`. It's only right as of the last
 // refresh: stoppages after that aren't seen.
 function parseClock(html, now) {
+  return clockText(readClock(html, now));
+}
+
+function clockText(c) {
+  if (!c) return '';
+  if (c.left <= 0) return 'End';
+  return Math.floor(c.left / 60) + ':' + (c.left % 60 < 10 ? '0' : '') + c.left % 60;
+}
+
+// The clock on a game's page as seconds left: `left` in the period and
+// `total` in the game (the rest of the period plus the regulation periods
+// after it), or null if the page has none.
+function readClock(html, now) {
   var m = html.match(/data-game-clock="([^"]*)"[^>]*?data-period-lengths="([^"]*)"(?:[^>]*?data-overtime-length="(\d+)")?/);
-  if (!m) return '';
+  if (!m) return null;
   var clock;
   try {
     clock = JSON.parse(decodeEntities(m[1]));
   } catch (e) {
-    return '';
+    return null;
   }
   var period = +clock.period || 0, gone = parseFloat(clock.time);
-  if (!period || isNaN(gone)) return '';
+  if (!period || isNaN(gone)) return null;
   if (clock.running && clock.started_at) {
     // "2026-11-27 23:38:15 +0000"
     var t = clock.started_at.match(/^(\d{4})-(\d\d)-(\d\d) (\d\d):(\d\d):(\d\d) ([+-])(\d\d)(\d\d)/);
@@ -409,10 +498,40 @@ function parseClock(html, now) {
   }
   var lengths = m[2].split(',');
   var mins = period <= lengths.length ? +lengths[period - 1] : +m[3];
-  if (!mins) return '';
-  var left = Math.ceil(mins * 60 - gone);
-  if (left <= 0) return 'End';
-  return Math.floor(left / 60) + ':' + (left % 60 < 10 ? '0' : '') + left % 60;
+  if (!mins) return null;
+  var left = Math.max(0, Math.ceil(mins * 60 - gone)), after = 0;
+  for (var p = period; p < lengths.length; p++) after += (+lengths[p] || 0) * 60;
+  return { left: left, total: left + after, period: period, full: mins * 60,
+           running: !!clock.running };
+}
+
+// The bar's text for a live game: the ticker's status with the clock added.
+// At halftime the ticker already says "3rd", so a 3rd with its clock stopped
+// at the full period (none of it played yet) is shown as "Halftime".
+function liveText(status, c) {
+  if (c && /^3rd$/i.test(status) && c.period === 3 && !c.running && c.left >= c.full) {
+    return 'Halftime';
+  }
+  return liveDetail(status, clockText(c));
+}
+
+// Of live games in the same period, the index of the one with the least
+// time left by its clock, or 0 if no clock could be read. The game already
+// showing (lastId) stays unless another is ahead of it by more than
+// SWITCH_MARGIN_S, so two close games don't swap places every refresh.
+var SWITCH_MARGIN_S = 60;
+function closestGame(ties, clocks, lastId) {
+  var best = 0, i;
+  for (i = 1; i < ties.length; i++) {
+    if (clocks[i] && (!clocks[best] || clocks[i].total < clocks[best].total)) best = i;
+  }
+  for (i = 0; i < ties.length; i++) {
+    if (lastId && ties[i].id === lastId && clocks[i] && clocks[best] &&
+        clocks[i].total - clocks[best].total <= SWITCH_MARGIN_S) {
+      return i;
+    }
+  }
+  return best;
 }
 
 // "2nd" from the ticker plus the clock: "2nd 10:12", or "End 2nd". Anything
@@ -550,6 +669,9 @@ function fetchWeather(s, force) {
   }, { timeout: 15000, maximumAge: WEATHER_REFRESH * 60000 });
 }
 
+// The live game last shown, so a close call between two games sticks.
+var lastLiveId = '';
+
 function fetchGame() {
   fetchWeather(loadSettings(), false);
   getTicker(function (html) {
@@ -563,25 +685,33 @@ function fetchGame() {
     }
     var g = game.game;
     if (!g || g.state !== LIVE || !g.id) {
-      send(gameMessage(g, s, now, game.league));
+      send(gameMessage(g, s, now, game.league, game.wake));
       return;
     }
     // Live: add the game clock from the game's own page, or go without it.
-    var done = function (clock) {
-      g.status = liveDetail(g.status, clock);
-      send(gameMessage(g, s, Date.now(), game.league));
+    // With other live games in the same period, read their clocks too and
+    // show the one with the least time left.
+    var ties = game.ties.filter(function (t) { return t.id; });
+    if (ties.indexOf(g) < 0) ties = [g];
+    var clocks = [], waiting = ties.length;
+    var done = function () {
+      var i = closestGame(ties, clocks, lastLiveId), t = ties[i];
+      lastLiveId = t.id;
+      t.status = liveText(t.status, clocks[i]);
+      send(gameMessage(t, s, Date.now(), game.league));
     };
-    getPartial(GAME_URL + g.id, function (page) {
-      var clock = '';
-      try {
-        clock = parseClock(page, Date.now());
-      } catch (e) {
-        console.log('Clock parse error: ' + e);
-      }
-      done(clock);
-    }, function (message) {
-      console.log('No game clock: ' + message);
-      done('');
+    ties.forEach(function (t, i) {
+      getPartial(GAME_URL + t.id, function (page) {
+        try {
+          clocks[i] = readClock(page, Date.now());
+        } catch (e) {
+          console.log('Clock parse error: ' + e);
+        }
+        if (--waiting === 0) done();
+      }, function (message) {
+        console.log('No game clock: ' + message);
+        if (--waiting === 0) done();
+      });
     });
   }, function (message) {
     // Keep whatever game the watch already has; the status only shows when
@@ -629,6 +759,8 @@ if (typeof Pebble !== 'undefined') {
       view: v('View', DEFAULTS.view),
       homeOnly: !!v('HomeOnly', DEFAULTS.homeOnly),
       noTeamGame: v('NoTeamGame', DEFAULTS.noTeamGame),
+      otherLive: v('OtherLive', DEFAULTS.otherLive),
+      otherLiveWhen: v('OtherLiveWhen', DEFAULTS.otherLiveWhen),
       mode: v('Mode', DEFAULTS.mode),
       timeZone: v('TimeZone', DEFAULTS.timeZone),
       showScores: !!v('ShowScores', DEFAULTS.showScores),
@@ -688,5 +820,6 @@ if (typeof module !== 'undefined' && typeof Pebble === 'undefined') {
   module.exports = { parseTicker: parseTicker, pickGame: pickGame, pickShown: pickShown,
                      gameMessage: gameMessage, refreshDelay: refreshDelay,
                      weatherIcon: weatherIcon, parseClock: parseClock,
-                     liveDetail: liveDetail, DEFAULTS: DEFAULTS };
+                     liveDetail: liveDetail, liveText: liveText, liveProgress: liveProgress,
+                     readClock: readClock, closestGame: closestGame, DEFAULTS: DEFAULTS };
 }

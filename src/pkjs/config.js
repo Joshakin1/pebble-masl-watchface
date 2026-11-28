@@ -128,6 +128,29 @@ module.exports = [
       },
       {
         type: 'radiogroup',
+        messageKey: 'OtherLive',
+        label: 'When other teams are playing live',
+        description: 'Your own live game always comes first. With two games live, ' +
+                     'the one closer to the end shows.',
+        defaultValue: 'off',
+        options: [
+          { label: "Keep showing my team's game", value: 'off' },
+          { label: "Show their game in my team's look", value: 'teamLook' },
+          { label: "Show their game with both teams' logos", value: 'league' }
+        ]
+      },
+      {
+        type: 'radiogroup',
+        messageKey: 'OtherLiveWhen',
+        label: 'Show other live games',
+        defaultValue: 'offDay',
+        options: [
+          { label: "Only on days my team doesn't play", value: 'offDay' },
+          { label: "Whenever my team's game isn't live", value: 'notLive' }
+        ]
+      },
+      {
+        type: 'radiogroup',
         messageKey: 'Mode',
         label: 'Before the game, show',
         defaultValue: 'time',

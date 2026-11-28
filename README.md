@@ -63,14 +63,22 @@ emulator, so spacing on a real watch will differ slightly.
 - When your team has no game listed: say `No games listed` (the default), or
   show the league's next game instead, either keeping your team's logo and
   colors or switching to league mode until your team has a game again
+- Other teams' live games (optional): while other teams are playing and your
+  team isn't, show their game in your team's look or with both teams' logos,
+  either only on days your team doesn't play or whenever your team's game
+  isn't live. Your own live game always comes first. Afterwards the face goes
+  back to your team's game
+- With two games live at once, the one closer to the end shows: the later
+  period, or with both in the same period, less time on the clock. The game
+  showing stays unless the other is more than a minute closer
 - Game bar:
   - Scheduled: `@ Wave - Sat 11/28` over the start time or a countdown
     (`in 3d 4h`, `in 2h 05m`, `in 12m`; or down to minutes, `in 3d 4h 12m`;
     or down to seconds, `3d 04:12:30` / `in 1:59:42`). Shows `Today` on game day.
     Start times follow the watch's 12/24 hour setting, or are always one or
     the other (`7:05pm EST` / `19:05 EST`).
-  - Live: `LIVE - 2nd 4:12` over the score, or over the opponent in
-    no-spoilers mode
+  - Live: `LIVE - 2nd 4:12` (or `LIVE - Halftime`) over the score, or over
+    the opponent in no-spoilers mode
   - Final (scores on only): `FINAL` over the score, for up to 6 hours after
     the start time, unless the next game is sooner
 - Larger text, set separately for the top row and the game bar. Each goes
@@ -124,6 +132,8 @@ emulator, so spacing on a real watch will differ slightly.
 | When Quiet Time is on, show it in | Off / Left spot / Middle spot / Right spot | Off |
 | Home games only | On / off (only with a team picked) | Off |
 | When my team has no game listed | Say "No games listed" / League's next game, keep my team's logo and colors / League's next game in league mode (only with a team picked) | Say "No games listed" |
+| When other teams are playing live | Keep showing my team's game / Show their game in my team's look / Show their game with both teams' logos (only with a team picked) | Keep showing my team's game |
+| Show other live games | Only on days my team doesn't play / Whenever my team's game isn't live | Only on days my team doesn't play |
 | Show | Start time / Countdown to start | Start time |
 | Countdown shows | Days and hours / Down to minutes / Down to seconds | Days and hours |
 | Start times in | Eastern (as listed) / My time zone / Home team's time zone | Eastern |
