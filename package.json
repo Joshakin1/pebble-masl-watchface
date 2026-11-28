@@ -80,7 +80,9 @@
       "UVShow",
       "UVHigh",
       "UVZone",
-      "QuickView"
+      "QuickView",
+      "TimeFont",
+      "TimeSize"
     ],
     "resources": {
       "media": [

@@ -4,6 +4,7 @@
 // config-custom.js, so keep the two in step when adding or renaming one.
 
 var TEAMS = require('./teams');
+var TIME_FONTS = require('./time-fonts');
 
 // A top row spot that something switches to while it matters, or off.
 function swapSelect(key, label) {
@@ -55,6 +56,33 @@ function zoneSelect(key, label, value) {
       { label: 'UV index', value: 'uv' }
     ]
   };
+}
+
+// The time's font, then a size picker for each style that has more than one
+// size. Only the chosen style's size picker shows.
+function timeFontItems() {
+  var items = [{
+    type: 'select',
+    messageKey: 'TimeFont',
+    label: 'Time font',
+    defaultValue: TIME_FONTS[0].value,
+    options: TIME_FONTS.map(function (f) { return { label: f.label, value: f.value }; })
+  }];
+  TIME_FONTS.forEach(function (f) {
+    if (f.sizes.length < 2) return;
+    var names = f.sizes.length === 2 ? ['Large', 'Small'] : ['Large', 'Medium', 'Small'];
+    items.push({
+      type: 'select',
+      messageKey: f.sizeKey,
+      label: 'Time size',
+      description: 'If the time is too wide for this screen, the next size down is used.',
+      defaultValue: '' + f.sizes[0],
+      options: f.sizes.map(function (size, i) {
+        return { label: names[i] + ' (' + size + ')', value: '' + size };
+      })
+    });
+  });
+  return items;
 }
 
 module.exports = [
@@ -189,6 +217,7 @@ module.exports = [
         defaultValue: '000000',
         sunlight: false
       },
+    ].concat(timeFontItems(), [
       {
         type: 'toggle',
         messageKey: 'Seconds',
@@ -230,7 +259,7 @@ module.exports = [
             value: 'logo' }
         ]
       }
-    ]
+    ])
   },
   {
     type: 'section',

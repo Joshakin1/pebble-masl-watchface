@@ -76,8 +76,12 @@ emulator, so spacing on a real watch will differ slightly.
 - Larger text, set separately for the top row and the game bar. Each goes
   up one font size; the larger bar is a little taller and moves the time up.
   When a tall logo no longer fits, the team's smaller logo is drawn instead.
-  The time stays the same size: it already uses the largest built-in digit
-  font
+- A choice of font and size for the time, from the watch's built-in digit
+  fonts: LECO (42 or 28, the default is 42), LECO Bold (38, 36 or 32),
+  Bitham (42 or 34) or Roboto Bold (49). The digits stay just above the game
+  bar and the logo's space grows or shrinks to make room. When the time
+  (with seconds, if they're on) is too wide for the screen, the next size
+  down in that font is used
 - Quick view: while a timeline peek covers the bottom of the screen, the time
   and game bar slide up above it and the logo is hidden, on every watch. Or,
   if chosen, the logo stays: the time moves up just above the peek, the peek
@@ -100,6 +104,8 @@ emulator, so spacing on a real watch will differ slightly.
 | Middle position | Balanced between left and right (or the screen edge) / Centered on the screen (rectangular watches) | Balanced |
 | Date format | `WED NOV 5` / `WED 5` / `NOV 5` / `5 NOV` / `WED 11/5` / `WED 5/11` / `11/5` / `5/11` / `2026-11-05` | `WED NOV 5` |
 | When the row is full, drop the | Month / Weekday (only for formats with both; ISO drops the year) | Month |
+| Time font | LECO / LECO Bold / Bitham / Roboto Bold | LECO |
+| Time size | LECO: 42 / 28. LECO Bold: 38 / 36 / 32. Bitham: 42 / 34. (Roboto Bold has one size, 49) | Largest |
 | Show seconds | On / off | Off |
 | Only while the backlight is on | On / off (shows seconds for about 4 seconds after a wrist flick) | Off |
 | Show battery | Always / When low or charging / Never | Always |
@@ -274,6 +280,10 @@ If a logo is mostly black or the team's background color, add a swap to
   Quick View are not yet built or checked in the emulator. Their positions
   are estimated from font sizes, so they need a look on every platform,
   especially round watches with the larger game bar.
+- Time fonts other than the default are not yet checked on a watch. Where
+  each font's digits sit in its line box is estimated (the `top` and
+  `bottom` numbers in `s_time_fonts` in `src/c/main.c`), so the time may sit
+  a few pixels high or low until those are tuned.
 - Score, live and final parsing are untested against real games until the
   season starts (Nov 27, 2026). Same caveat as MASL Scores.
 - The ticker lists about a month of games (20 as of Oct 27, 2026). A team with

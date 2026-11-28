@@ -25,6 +25,10 @@ Suggested version: **1.2.0** (it has a new feature).
   period like the arena clock: "LIVE - 2nd 9:39". It's as of the last score
   update, so it doesn't tick between updates. Where the line is too wide for
   the screen, "LIVE - " is dropped. (#11)
+- A font and size for the time, under Look in settings: LECO (42 or 28),
+  LECO Bold (38, 36 or 32), Bitham (42 or 34) or Roboto Bold (49), all built
+  into the watch. The default stays LECO 42. If the time is too wide for the
+  screen in the chosen size, the next size down is used.
 
 ### Fixed
 
