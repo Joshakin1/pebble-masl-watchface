@@ -941,7 +941,10 @@ static void format_steps(char *buf, size_t size) {
 static void format_heart(char *buf, size_t size) {
   buf[0] = '\0';
 #if defined(PBL_HEALTH)
-  if (!health_available(HealthMetricHeartRateBPM)) return;
+  // Just ask for the latest reading: 0 means there isn't one (or no sensor).
+  // Heart rate is a reading, not a total, and asking first whether it's
+  // available over the day so far, as steps do, says no even on watches that
+  // have a reading, so the number never showed.
   int bpm = (int)health_service_peek_current_value(HealthMetricHeartRateBPM);
   if (bpm > 0) snprintf(buf, size, "%d", bpm);
 #endif
